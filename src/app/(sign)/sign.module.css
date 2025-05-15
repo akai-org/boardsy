@@ -1,0 +1,84 @@
+.background, .form{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.background {
+    width: 100vw;
+    height: 100vh;
+    background-image: url('/gradient2.webp');
+    background-size: cover;
+    background-position: center;
+}
+
+.form{
+    flex-direction: column;
+    gap: 4em;
+    
+
+    width: 45em;
+
+    background-color: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    
+    border: 2px solid white;
+    border-radius: 4em;
+    
+    color: white;
+}
+.signin{
+    height: 50em;
+}
+.signup{
+    height: 60em;
+}
+.form>h1{
+    font-size: 3em;
+    font-weight: 600;
+}
+
+.inputs, .options{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.inputs>input, .inputs>label, .submit{
+    width: 60%;
+}
+
+.inputs>input, .submit{
+    padding: 2px 0.5em;
+    font-size: 1.5em;
+    border: 2px solid white;
+    border-radius: 5em;
+}
+
+.inputs>input{
+    color: white;
+    background: none;
+    margin-bottom: 1em;
+}
+.inputs>label{
+    color: white;
+    text-align: left;
+    font-size: 1.5em;
+    padding-left: 0.3em;
+}
+
+.submit{
+    background-color: white;
+    color: rgb(66, 46, 130);
+    font-weight: 600;
+    margin-bottom: 0.5em;
+}
+
+.options>a{
+    font-size: 1.2em;
+}
+.options>a:hover{
+    cursor: pointer;
+    color: rgb(66, 46, 130);
+}
