@@ -19,22 +19,22 @@ interface DisplayBoardsProps {
     initialBoards: Board[];
 }
 
-function board(boards : Board){
-    return(
+function board(boards: Board) {
+    return (
         <li className={styles.board} key={boards.id}>
-                        <div className={styles.gradient}>
-                            <button className={styles.hoverButton}>
-                                <Image
-                                    src={'/trash.svg'}
-                                    alt="Delete board button"
-                                    height={30}
-                                    width={30}
-                                    className="cursor-pointer"
-                                />
-                            </button>
-                        </div>
-                            <p className={styles.title}>{boards.name}</p>
-                    </li>)
+            <div className={styles.gradient}>
+                <button className={styles.hoverButton}>
+                    <Image
+                        src={'/trash.svg'}
+                        alt="Delete board button"
+                        height={30}
+                        width={30}
+                        className="cursor-pointer"
+                    />
+                </button>
+            </div>
+            <p className={styles.title}>{boards.name}</p>
+        </li>)
 }
 
 
@@ -70,7 +70,7 @@ export default function DynamicBoards({ initialBoards }: DisplayBoardsProps) {
                 <p>Loading boards...</p>
             ) : (
                 <ul className={styles.boardsList}>
-                    {boards.map((content) => 
+                    {boards.map((content) =>
                         (board(content)
                     ))}
                 </ul>

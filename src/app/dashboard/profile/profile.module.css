@@ -6,7 +6,7 @@
     justify-content: center;
     align-items: center;
 
-    background-image: url('/gradient.jpg');
+    background-image: url('/gradient2.webp');
     background-size: cover;
     background-position: center;
 }
@@ -15,7 +15,8 @@
     width: 100%;
     max-width: 850px;
     box-sizing: border-box;
-    padding: 5em;
+
+    padding: 4em 5em 5em 5em;
     /* rounded-2xl */
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1),
         0 1px 2px rgba(0, 0, 0, 0.06);
@@ -29,13 +30,12 @@
 
 /* Title */
 .title {
-    font-size: 1.875rem;
-    /* 30px */
-    line-height: 2.25rem;
-    /* 36px */
-    font-weight: 700;
-    margin-bottom: 1.5rem;
-    /* 24px */
+
+    font-size: 3em;
+    font-weight: 600;
+    margin-bottom: 1em;
+    text-align: center;
+    color: white;
 }
 
 /* Vertical spacing between sections */
@@ -58,11 +58,13 @@
 
 /* Section headings */
 .sectionTitle {
-    font-size: 1.25rem;
+    font-size: 2em;
     /* 20px */
     line-height: 1.75rem;
     /* 28px */
     font-weight: 600;
+    color: white;
+
 }
 
 /* Avatar wrapper */
@@ -84,15 +86,14 @@
 
 /* Standard “edit” buttons */
 .editButton {
-    padding: 0.5rem 1rem;
-    /* py-2 px-4 */
-    background-color: #4f46e5;
-    /* indigo-600 */
-    color: #ffffff;
-    border: none;
-    border-radius: 0.5rem;
-    /* rounded-lg */
-    cursor: pointer;
+    padding: 2px 0.5em;
+    font-size: 1.5em;
+    border: 2px solid white;
+    border-radius: 5em;
+    background-color: white;
+    color: rgb(66, 46, 130);
+    font-weight: 600;
+    margin-bottom: 0.5em;
 
 }
 
@@ -138,30 +139,30 @@
 .value {
     margin-top: 0.25rem;
     /* 4px */
-    color: #374151;
+    font-size: 1.5em;
+
+    color: white;
     /* gray-700 */
 }
 
 .valueToChange {
-    margin-top: 0.25rem;
-    /* 4px */
-    color: #374151;
-    /* gray-700 */
-    border: 1px solid black;
-    border-radius: 0.5rem;
-    padding: 5px 10px;
+    padding: 2px 0.5em;
+    font-size: 1.5em;
+    border: 2px solid white;
+    border-radius: 5em;
+    color: white;
 }
 
 /* Red “danger” button */
 .redButton {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    background-color: #dc2626;
-    /* red-600 */
-    color: #ffffff;
-    border: none;
-    border-radius: 0.5rem;
-    cursor: pointer;
+    padding: 2px 0.5em;
+    font-size: 1.5em;
+    border: 2px solid white;
+    border-radius: 5em;
+    background-color: white;
+    color: rgb(66, 46, 130);
+    font-weight: 600;
+    margin-bottom: 0.5em;
 }
 
 .redButton:hover {
@@ -221,15 +222,14 @@
 }
 
 .editNameButton {
-    padding: 0.5rem 1rem;
-    /* py-2 px-4 */
-    background-color: #4f46e5;
-    /* indigo-600 */
-    color: #ffffff;
-    border: none;
-    border-radius: 0.5rem;
-    /* rounded-lg */
-    cursor: pointer;
+    padding: 2px 0.5em;
+    font-size: 1.5em;
+    border: 2px solid white;
+    border-radius: 5em;
+    background-color: white;
+    color: rgb(66, 46, 130);
+    font-weight: 600;
+    margin-bottom: 0.5em;
     grid-column: span 2;
 }
 
