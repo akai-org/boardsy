@@ -19,22 +19,44 @@ interface DisplayBoardsProps {
     initialBoards: Board[];
 }
 
-function board(boards: Board) {
+function Board({ data }: { data: Board }) {
+    const [menuVisible, setMenuVisible] = useState(false);
+
+    const handleIconClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        setMenuVisible((prev) => !prev);
+    };
+
     return (
-        <li className={styles.board} key={boards.id}>
-            <div className={styles.gradient}>
-                <button className={styles.hoverButton}>
+        <li className={styles.board} key={data.id}>
+            <div className={styles.gradient} onMouseLeave={() => setMenuVisible(false)}>
+                <button
+                    className={styles.hoverButton}
+                    onClick={handleIconClick}
+                >
                     <Image
-                        src={'/trash.svg'}
-                        alt="Delete board button"
-                        height={30}
+                        src="/cogwheel.svg"
+                        alt="Open board options"
                         width={30}
+                        height={30}
                         className="cursor-pointer"
                     />
                 </button>
+
+                {menuVisible && (
+                    <ul
+                        className={styles.contextMenu}
+                        style={{ top: 0, right: 0 }}
+                    >
+                        <li className={styles.contextMenuItem}>Rename</li>
+                        <li className={styles.contextMenuItem}>Delete</li>
+                    </ul>
+                )}
             </div>
-            <p className={styles.title}>{boards.name}</p>
-        </li>)
+
+            <p className={styles.title}>{data.name}</p>
+        </li>
+    );
 }
 
 
@@ -70,8 +92,8 @@ export default function DynamicBoards({ initialBoards }: DisplayBoardsProps) {
                 <p>Loading boards...</p>
             ) : (
                 <ul className={styles.boardsList}>
-                    {boards.map((content) =>
-                        (board(content)
+                    {boards.map((content) => (
+                        <Board data={content} key={content.id}/>
                     ))}
                 </ul>
             )}
