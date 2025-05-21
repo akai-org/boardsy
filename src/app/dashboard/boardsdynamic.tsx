@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useActionState } from 'react';
 import { getBoards } from '@/server/actions/board';
 import styles from './dashboard.module.css';
 import Image from 'next/image';
+import { ActionResponse } from '@/types/global';
 
 type SortOption = 'Last edited' | 'Created at' | 'Alphabetically';
 
@@ -19,12 +20,41 @@ interface DisplayBoardsProps {
     initialBoards: Board[];
 }
 
+const initialState: ActionResponse = {
+    success: false,
+    message: '',
+    errors: undefined,
+}
+
 
 const DeletePopup = ({ board, trigger, setTrigger }: {
     board: Board,
     trigger: boolean,
     setTrigger: React.Dispatch<React.SetStateAction<boolean>>
 }) => {
+
+    const [state, formAction, isPending] = useActionState<
+        ActionResponse,
+        FormData
+    >(async (prevState: ActionResponse, formData: FormData) => {
+        try {
+            const result = await DeleteBoard(formData)
+            //create and import server action to delete the board
+
+            if (result.success)
+                // ------- handleSortChange() -------- 
+                //access the refresh function
+                //from DynamicBoards somehow
+            return result
+        } catch (e) {
+            return {
+                success: false,
+                message: (e as Error).message || 'An error occurred',
+                errors: undefined,
+            }
+        }
+    }, initialState)
+
 
 
     if (!trigger)
