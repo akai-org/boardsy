@@ -19,8 +19,76 @@ interface DisplayBoardsProps {
     initialBoards: Board[];
 }
 
+
+const DeletePopup = ({ board, trigger, setTrigger }: {
+    board: Board,
+    trigger: boolean,
+    setTrigger: React.Dispatch<React.SetStateAction<boolean>>
+}) => {
+
+
+    if (!trigger)
+        return ''
+
+    return (
+        <div className={styles.popupOverlay}>
+            <div className={styles.popupContainer}>
+                <h1 className={styles.popupHeader}>Delete {board.name}?</h1>
+                <div className={styles.popupActions}>
+                    <button className={`${styles.popupButton} ${styles['popupButton--primary']}`}>Delete</button>
+                    <button
+                        className={`${styles.popupButton} ${styles['popupButton--secondary']}`}
+                        onClick={() => setTrigger(false)}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+const RenamePopup = ({ board, trigger, setTrigger }: {
+    board: Board,
+    trigger: boolean,
+    setTrigger: React.Dispatch<React.SetStateAction<boolean>>
+}) => {
+
+    if (!trigger)
+        return ''
+
+    return (
+        <div className={styles.popupOverlay}>
+            <div className={styles.popupContainer}>
+                <form className={styles.popupForm} onSubmit={(e) => e.preventDefault()}>
+                    <h1 className={styles.popupHeader}>Rename {board.name}</h1>
+                    <input className={styles.popupInput} type="text" name="newname" id="newname" />
+                    <div className={styles.popupActions}>
+                        <button
+                            className={`${styles.popupButton} ${styles['popupButton--primary']} ${styles.rename}`}
+                            type="submit"
+                        >
+                            Rename
+                        </button>
+                        <button
+                            className={`${styles.popupButton} ${styles['popupButton--secondary']}`}
+                            onClick={() => setTrigger(false)}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+
 function Board({ data }: { data: Board }) {
-    const [menuVisible, setMenuVisible] = useState(false);
+    const [menuVisible, setMenuVisible] = useState(false)
+    const [showDeletePopup, setShowDeletePoput] = useState(false)
+    const [showRenamePopup, setShowRenamePoput] = useState(false)
+
 
     const handleIconClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
@@ -48,10 +116,22 @@ function Board({ data }: { data: Board }) {
                         className={styles.contextMenu}
                         style={{ top: 0, right: 0 }}
                     >
-                        <li className={styles.contextMenuItem}>Rename</li>
-                        <li className={styles.contextMenuItem}>Delete</li>
+                        <li onClick={() => setShowRenamePoput(true)} className={styles.contextMenuItem}>Rename</li>
+                        <li onClick={() => setShowDeletePoput(true)} className={styles.contextMenuItem}>Delete</li>
                     </ul>
                 )}
+
+                <DeletePopup
+                    board={data}
+                    trigger={showDeletePopup}
+                    setTrigger={setShowDeletePoput}
+                />
+
+                <RenamePopup
+                    board={data}
+                    trigger={showRenamePopup}
+                    setTrigger={setShowRenamePoput}
+                />
             </div>
 
             <p className={styles.title}>{data.name}</p>
@@ -93,7 +173,7 @@ export default function DynamicBoards({ initialBoards }: DisplayBoardsProps) {
             ) : (
                 <ul className={styles.boardsList}>
                     {boards.map((content) => (
-                        <Board data={content} key={content.id}/>
+                        <Board data={content} key={content.id} />
                     ))}
                 </ul>
             )}
