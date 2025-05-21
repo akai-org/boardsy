@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useTransition, useActionState } from 'react';
-import { getBoards } from '@/server/actions/board';
+import { deleteBoard, getBoards, renameBoard } from '@/server/actions/board';
 import styles from './dashboard.module.css';
 import Image from 'next/image';
 import { ActionResponse } from '@/types/global';
+
 
 type SortOption = 'Last edited' | 'Created at' | 'Alphabetically';
 
@@ -16,8 +17,11 @@ interface Board {
     updatedAt: Date;
 }
 
-interface DisplayBoardsProps {
-    initialBoards: Board[];
+interface BoardPopupProps {
+    board: Board;
+    trigger: boolean;
+    setTrigger: React.Dispatch<React.SetStateAction<boolean>>;
+    setBoards: React.Dispatch<React.SetStateAction<Board[]>>;
 }
 
 const initialState: ActionResponse = {
@@ -27,35 +31,7 @@ const initialState: ActionResponse = {
 }
 
 
-const DeletePopup = ({ board, trigger, setTrigger }: {
-    board: Board,
-    trigger: boolean,
-    setTrigger: React.Dispatch<React.SetStateAction<boolean>>
-}) => {
-
-    const [state, formAction, isPending] = useActionState<
-        ActionResponse,
-        FormData
-    >(async (prevState: ActionResponse, formData: FormData) => {
-        try {
-            const result = await DeleteBoard(formData)
-            //create and import server action to delete the board
-
-            if (result.success)
-                // ------- handleSortChange() -------- 
-                //access the refresh function
-                //from DynamicBoards somehow
-            return result
-        } catch (e) {
-            return {
-                success: false,
-                message: (e as Error).message || 'An error occurred',
-                errors: undefined,
-            }
-        }
-    }, initialState)
-
-
+const DeletePopup = ({ board, trigger, setTrigger, setBoards }: BoardPopupProps) => {
 
     if (!trigger)
         return ''
@@ -65,7 +41,15 @@ const DeletePopup = ({ board, trigger, setTrigger }: {
             <div className={styles.popupContainer}>
                 <h1 className={styles.popupHeader}>Delete {board.name}?</h1>
                 <div className={styles.popupActions}>
-                    <button className={`${styles.popupButton} ${styles['popupButton--primary']}`}>Delete</button>
+                    <button className={`${styles.popupButton} ${styles['popupButton--primary']}`} onClick={async () => {
+
+                        const result = await deleteBoard(board.id)
+                        if (result.success) {
+                            setTrigger(false)
+                            setBoards((prev) => prev.filter((b) => b.id !== board.id))
+                        }
+
+                    }}>Delete</button>
                     <button
                         className={`${styles.popupButton} ${styles['popupButton--secondary']}`}
                         onClick={() => setTrigger(false)}
@@ -78,11 +62,33 @@ const DeletePopup = ({ board, trigger, setTrigger }: {
     )
 }
 
-const RenamePopup = ({ board, trigger, setTrigger }: {
-    board: Board,
-    trigger: boolean,
-    setTrigger: React.Dispatch<React.SetStateAction<boolean>>
-}) => {
+
+const RenamePopup = ({ board, trigger, setTrigger, setBoards }: BoardPopupProps) => {
+
+    const [newName, setNewName] = useState<string>('')
+    const [state, formAction, isPending] = useActionState<
+        ActionResponse,
+        FormData
+    >(async (prevState: ActionResponse, formData: FormData) => {
+        try {
+            const result = await renameBoard(board.id, formData)
+
+            if (result.success) {
+                setTrigger(false)
+                setBoards((prev) => prev.map((b) => b.id === board.id ? { ...b, name: newName } : b))
+            }
+
+            return result
+
+        } catch (e) {
+            return {
+                success: false,
+                message: (e as Error).message || 'An error occurred',
+                errors: undefined,
+            }
+        }
+    }, initialState)
+
 
     if (!trigger)
         return ''
@@ -90,19 +96,26 @@ const RenamePopup = ({ board, trigger, setTrigger }: {
     return (
         <div className={styles.popupOverlay}>
             <div className={styles.popupContainer}>
-                <form className={styles.popupForm} onSubmit={(e) => e.preventDefault()}>
+                <form action={formAction} className={styles.popupForm}>
+
+                    {state?.message && !state.success && (
+                        state.message
+                    )}
+
                     <h1 className={styles.popupHeader}>Rename {board.name}</h1>
-                    <input className={styles.popupInput} type="text" name="newname" id="newname" />
+                    <input value={newName} onChange={(e) => setNewName(e.target.value)} className={styles.popupInput} type="text" name="newname" id="newname" disabled={isPending} />
                     <div className={styles.popupActions}>
                         <button
                             className={`${styles.popupButton} ${styles['popupButton--primary']} ${styles.rename}`}
                             type="submit"
+                            disabled={isPending}
                         >
                             Rename
                         </button>
                         <button
                             className={`${styles.popupButton} ${styles['popupButton--secondary']}`}
                             onClick={() => setTrigger(false)}
+                            disabled={isPending}
                         >
                             Cancel
                         </button>
@@ -114,7 +127,7 @@ const RenamePopup = ({ board, trigger, setTrigger }: {
 }
 
 
-function Board({ data }: { data: Board }) {
+function Board({ data, setBoards }: { data: Board, setBoards: React.Dispatch<React.SetStateAction<Board[]>> }) {
     const [menuVisible, setMenuVisible] = useState(false)
     const [showDeletePopup, setShowDeletePoput] = useState(false)
     const [showRenamePopup, setShowRenamePoput] = useState(false)
@@ -146,8 +159,8 @@ function Board({ data }: { data: Board }) {
                         className={styles.contextMenu}
                         style={{ top: 0, right: 0 }}
                     >
-                        <li onClick={() => setShowRenamePoput(true)} className={styles.contextMenuItem}>Rename</li>
-                        <li onClick={() => setShowDeletePoput(true)} className={styles.contextMenuItem}>Delete</li>
+                        <li onClick={() => {setMenuVisible(false); setShowRenamePoput(true)}} className={styles.contextMenuItem}>Rename</li>
+                        <li onClick={() => {setMenuVisible(false); setShowDeletePoput(true)}} className={styles.contextMenuItem}>Delete</li>
                     </ul>
                 )}
 
@@ -155,12 +168,14 @@ function Board({ data }: { data: Board }) {
                     board={data}
                     trigger={showDeletePopup}
                     setTrigger={setShowDeletePoput}
+                    setBoards={setBoards}
                 />
 
                 <RenamePopup
                     board={data}
                     trigger={showRenamePopup}
                     setTrigger={setShowRenamePoput}
+                    setBoards={setBoards}
                 />
             </div>
 
@@ -170,7 +185,8 @@ function Board({ data }: { data: Board }) {
 }
 
 
-export default function DynamicBoards({ initialBoards }: DisplayBoardsProps) {
+export default function DynamicBoards({ initialBoards }: { initialBoards: Board[] }) {
+
     const [boards, setBoards] = useState<Board[]>(initialBoards);
     const [displayOption, setDisplayOption] = useState<SortOption>('Last edited');
     const [isPending, startTransition] = useTransition();
@@ -203,7 +219,7 @@ export default function DynamicBoards({ initialBoards }: DisplayBoardsProps) {
             ) : (
                 <ul className={styles.boardsList}>
                     {boards.map((content) => (
-                        <Board data={content} key={content.id} />
+                        <Board data={content} key={content.id} setBoards={setBoards} />
                     ))}
                 </ul>
             )}
