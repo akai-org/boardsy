@@ -20,7 +20,7 @@ export default function DashboardLayout({
                             height={40}
                             className={styles.objectCover}
                         />
-                        <h1>Boardsy</h1>
+                        <h1>Board alpha</h1>
                     </Link>
                 </section>
                 <section>

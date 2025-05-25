@@ -35,9 +35,9 @@ src/
 │
 ├─ server/
 │  ├─ actions/       # React server actions for retrieving and managing data
-│  │  ├─ sign.ts     # Sign up, sign in and sign out
-│  │  ├─ user.ts     # Managing user's profile
-│  │  └─ board.ts    # Creating, retrieving, updating and deleting user's boards
+│  │  ├─ sign.ts     # sign up, sign in and sign out
+│  │  ├─ user.ts     # managing user's profile
+│  │  └─ board.ts    # creating, retrieving, updating and deleting user's boards
 │  ├─ auth.ts        # Session and cookie helpers
 │  ├─ dal.ts         # Data access layer abstractions
 │  ├─ db.ts          # Prisma client initialization
