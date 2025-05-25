@@ -123,3 +123,112 @@ export async function getBoards(displayOption: SortOption) {
         }
     }
 }
+
+
+
+export async function deleteBoard(board_id: string): Promise<ActionResponse> {
+
+    const session = await getSession()
+
+    if (!session)
+        return {
+            success: false,
+            message: 'Invalid session',
+            error: 'Invalid session',
+        }
+
+    try {
+        const board = await prisma.board.findUnique({
+            where: {id: board_id}
+        })
+
+        if (!board)
+            return {
+                success: false,
+                message: 'Board does not exist',
+                error: 'Board does not exist',
+            }
+
+        if (board.ownerId !== session.userId)
+            return {
+                success: false,
+                message: 'You do not own this board',
+                error: 'You do not own this board',
+            }
+
+        await prisma.board.delete({
+            where: {id: board_id}
+        })
+
+        return { success: true, message: 'Board deleted successfuly'}
+        
+    } catch (e) {
+
+        console.log(e)
+        return {
+            success: false,
+            message: 'Internal server error',
+            error: 'Internal server error',
+        }
+    }
+}
+
+
+
+export async function renameBoard(board_id: string, formData: FormData): Promise<ActionResponse> {
+
+    const session = await getSession()
+
+    if (!session)
+        return {
+            success: false,
+            message: 'Invalid session',
+            error: 'Invalid session',
+        }
+
+    const newname = formData.get("newname") as string
+
+    if (!newname)
+        return {
+            success: false,
+            message: 'No name provided',
+            error: 'No name provided',
+        }
+
+    try {
+        const board = await prisma.board.findUnique({
+            where: {id: board_id}
+        })
+
+        if (!board)
+            return {
+                success: false,
+                message: 'Board does not exist',
+                error: 'Board does not exist',
+            }
+
+        if (board.ownerId !== session.userId)
+            return {
+                success: false,
+                message: 'You do not own this board',
+                error: 'You do not own this board',
+            }
+
+        if (newname !== board.name)
+            await prisma.board.update({
+                where: {id: board_id},
+                data: { name: newname}
+            })
+
+        return { success: true, message: 'Board renamed successfuly'}
+        
+    } catch (e) {
+
+        console.log(e)
+        return {
+            success: false,
+            message: 'Internal server error',
+            error: 'Internal server error',
+        }
+    }
+}
