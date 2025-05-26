@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useActionState } from 'react';
+import { useState, useEffect, useTransition, useActionState } from 'react';
 import { deleteBoard, getBoards, renameBoard } from '@/server/actions/board';
 import styles from './dashboard.module.css';
 import Image from 'next/image';
@@ -159,8 +159,8 @@ function Board({ data, setBoards }: { data: Board, setBoards: React.Dispatch<Rea
                         className={styles.contextMenu}
                         style={{ top: 0, right: 0 }}
                     >
-                        <li onClick={() => {setMenuVisible(false); setShowRenamePoput(true)}} className={styles.contextMenuItem}>Rename</li>
-                        <li onClick={() => {setMenuVisible(false); setShowDeletePoput(true)}} className={styles.contextMenuItem}>Delete</li>
+                        <li onClick={() => { setMenuVisible(false); setShowRenamePoput(true) }} className={styles.contextMenuItem}>Rename</li>
+                        <li onClick={() => { setMenuVisible(false); setShowDeletePoput(true) }} className={styles.contextMenuItem}>Delete</li>
                     </ul>
                 )}
 
@@ -187,17 +187,22 @@ function Board({ data, setBoards }: { data: Board, setBoards: React.Dispatch<Rea
 
 export default function DynamicBoards({ initialBoards }: { initialBoards: Board[] }) {
 
-    const [boards, setBoards] = useState<Board[]>(initialBoards);
-    const [displayOption, setDisplayOption] = useState<SortOption>('Last edited');
-    const [isPending, startTransition] = useTransition();
+    const [boards, setBoards] = useState<Board[]>(initialBoards)
+    const [displayOption, setDisplayOption] = useState<SortOption>('Last edited')
+    const [isPending, startTransition] = useTransition()
+
+    useEffect(() => {
+        setDisplayOption('Last edited')
+        setBoards(initialBoards)
+    }, [initialBoards])
 
     async function handleSortChange(e: React.ChangeEvent<HTMLSelectElement>) {
         const newOption = e.target.value as SortOption;
-        setDisplayOption(newOption);
+        setDisplayOption(newOption)
         startTransition(async () => {
             const response = await getBoards(newOption);
             if (response.success) {
-                setBoards(response.boards);
+                setBoards(response.boards)
             }
         });
     }
