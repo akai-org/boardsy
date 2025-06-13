@@ -1,126 +1,240 @@
-'use client'
+'use client';
 
-import React, { useRef, useState, useEffect } from 'react'
-import Image from 'next/image'
-import Link from 'next/link'
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  PointerEvent,
+  WheelEvent,
+} from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import type { Board } from '@prisma/client';
+import styles from './board.module.sass';
 
-import type { Board } from '@prisma/client'
-import styles from './board.module.css'
+/* ------------------------------------------------------------------ */
+/* Types                                                              */
+/* ------------------------------------------------------------------ */
+type Point = { x: number; y: number };
+type Stroke = Point[];
 
-
+/* ------------------------------------------------------------------ */
+/* Component                                                          */
+/* ------------------------------------------------------------------ */
 export default function BoardClient({ data }: { data: Board }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const canvasRef = useRef<HTMLCanvasElement>(null)
+  /* ──────────────── UI / tool state ──────────────── */
+  const [tool, setTool] = useState<'selector' | 'pencil'>('selector');
 
-    // track which tool is active
-    const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
+  /* ──────────────── view-transform (zoom + pan) ──── */
+  const [view, setView] = useState({ scale: 1, tx: 0, ty: 0 });
 
-    // refs to track drawing state & last coordinates
-    const isDrawingRef = useRef(false)
-    const lastPosRef = useRef({ x: 0, y: 0 })
+  /* ──────────────── drawing model ─────────────────── */
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [draft, setDraft] = useState<Stroke>([]); // currently-drawn stroke
 
-    // grow to fill viewport
-    const [size, setSize] = useState({ width: 0, height: 0 })
-    useEffect(() => {
-        function updateSize() {
-            setSize({ width: window.innerWidth, height: window.innerHeight })
-        }
-        updateSize()
-        window.addEventListener('resize', updateSize)
-        return () => window.removeEventListener('resize', updateSize)
-    }, [])
+  /* ------------------------------------------------------------------ */
+  /* Canvas size — always exactly the viewport, retina-sharp            */
+  /* ------------------------------------------------------------------ */
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current!;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
 
-    // get a 2d context once
-    const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
-    useEffect(() => {
-        const canvas = canvasRef.current
-        if (canvas) {
-            const ctx = canvas.getContext('2d')
-            if (ctx) {
-                ctx.lineCap = 'round'
-                ctx.lineWidth = 2
-                ctxRef.current = ctx
-            }
-        }
-    }, [])
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr); // 1 css-px == 1 world-unit
+    drawScene();
+  }, []); // drawScene defined further down
 
-    // handlers
-    function handleDown(e: React.MouseEvent) {
-        if (activeTool !== 'pencil') return
-        const rect = canvasRef.current!.getBoundingClientRect()
-        lastPosRef.current = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-        }
-        isDrawingRef.current = true
+  useEffect(() => {
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, [resizeCanvas]);
+
+  /* ------------------------------------------------------------------ */
+  /* Helpers                                                            */
+  /* ------------------------------------------------------------------ */
+  const screenToWorld = (clientX: number, clientY: number): Point => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - view.tx) / view.scale,
+      y: (clientY - rect.top - view.ty) / view.scale,
+    };
+  };
+
+  const drawStroke = (ctx: CanvasRenderingContext2D, pts: Stroke) => {
+    if (pts.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+
+    /* quadratic-curve smoothing */
+    for (let i = 1; i < pts.length - 1; i++) {
+      const midX = (pts[i].x + pts[i + 1].x) * 0.5;
+      const midY = (pts[i].y + pts[i + 1].y) * 0.5;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
     }
+    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    ctx.stroke();
+  };
 
-    function handleMove(e: React.MouseEvent) {
-        if (!isDrawingRef.current || activeTool !== 'pencil') return
-        const rect = canvasRef.current!.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+  const applyTransform = (ctx: CanvasRenderingContext2D) => {
+    ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
+  };
 
-        const ctx = ctxRef.current!
-        ctx.beginPath()
-        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
-        ctx.lineTo(x, y)
-        ctx.stroke()
+  const drawScene = useCallback(() => {
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext('2d')!;
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    applyTransform(ctx);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2 / view.scale; // visually constant 2 px
+    [...strokes, draft].forEach((s) => drawStroke(ctx, s));
+    ctx.restore();
+  }, [strokes, draft, view]);
 
-        lastPosRef.current = { x, y }
-    }
+  useEffect(drawScene, [drawScene]);
 
-    function handleUp() {
-        isDrawingRef.current = false
-    }
+  /* ------------------------------------------------------------------ */
+  /* Pointer-tool handlers                                              */
+  /* ------------------------------------------------------------------ */
+  const handlePointerDown = (e: PointerEvent) => {
+    if (tool !== 'pencil') return;
+    const pt = screenToWorld(e.clientX, e.clientY);
+    setDraft([pt]);
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
 
-    return (
-        <>
-            <div className={styles.title}>
-                <Link href="/dashboard">
-                    <h1>Boardsy</h1>
-                </Link>
-                <h2>{data.name}</h2>
-            </div>
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!draft.length) return;
+    setDraft((d) => [...d, screenToWorld(e.clientX, e.clientY)]);
+  };
 
-            <div className={styles.tools}>
-                <button onClick={() => setActiveTool('selector')}>
-                    <Image src="/tools/selector.svg" alt="selector" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('pencil')}>
-                    <Image src="/tools/pencil.svg" alt="pencil" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('text')}>
-                    <Image src="/tools/text.svg" alt="text" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('shapes')}>
-                    <Image src="/tools/shapes.svg" alt="shapes" width={50} height={50} />
-                </button>
-            </div>
+  const handlePointerUp = (e: PointerEvent) => {
+    if (!draft.length) return;
+    setStrokes((s) => [...s, draft]);
+    setDraft([]);
+    (e.target as Element).releasePointerCapture(e.pointerId);
+  };
 
-            <div className={styles.zoom}>
-                <button>
-                    <Image src="/tools/minus.svg" alt="zoom out" width={50} height={50} />
-                </button>
-                <div>x %</div>
-                <button>
-                    <Image src="/tools/plus.svg" alt="zoom in" width={50} height={50} />
-                </button>
-            </div>
+  /* ------------------------- pan (space-drag or middle mouse) ------- */
+  const panning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
 
-            <canvas
-                ref={canvasRef}
-                width={size.width}
-                height={size.height}
-                onMouseDown={handleDown}
-                onMouseMove={handleMove}
-                onMouseUp={handleUp}
-                onMouseLeave={handleUp}
-                className={
-                    `${styles.canvas} ` +
-                    (activeTool === 'pencil' ? styles.pencilCursor : styles.defaultCursor)
-                }
-            />
-        </>
-    )
+  const startPan = (e: PointerEvent) => {
+    if (tool !== 'selector' && e.button !== 1 && !e.shiftKey) return;
+    panning.current = true;
+    panStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      tx: view.tx,
+      ty: view.ty,
+    };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+
+  const movePan = (e: PointerEvent) => {
+    if (!panning.current) return;
+    const dx = e.clientX - panStart.current.x;
+    const dy = e.clientY - panStart.current.y;
+    setView((v) => ({
+      ...v,
+      tx: panStart.current.tx + dx,
+      ty: panStart.current.ty + dy,
+    }));
+  };
+
+  const endPan = (e: PointerEvent) => {
+    panning.current = false;
+    (e.target as Element).releasePointerCapture(e.pointerId);
+  };
+
+  /* ------------------------- wheel-zoom centred on cursor ----------- */
+  const handleWheel = (e: WheelEvent) => {
+    const factor = Math.exp(-e.deltaY / 500);
+    const newScale = Math.min(4, Math.max(0.1, view.scale * factor));
+    if (newScale === view.scale) return;
+
+    const { x, y } = screenToWorld(e.clientX, e.clientY);
+    setView({
+      scale: newScale,
+      tx: e.clientX - x * newScale,
+      ty: e.clientY - y * newScale,
+    });
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Render                                                             */
+  /* ------------------------------------------------------------------ */
+  return (
+    <>
+      {/* title bar */}
+      <div className={styles.title}>
+        <Link href="/dashboard">
+          <h1>Boardsy</h1>
+        </Link>
+        <h2>{data.name}</h2>
+      </div>
+
+      {/* tool bar */}
+      <div className={styles.tools}>
+        <button onClick={() => setTool('selector')}>
+          <Image src="/tools/selector.svg" alt="selector" width={50} height={50} />
+        </button>
+        <button onClick={() => setTool('pencil')}>
+          <Image src="/tools/pencil.svg" alt="pencil" width={50} height={50} />
+        </button>
+      </div>
+
+      {/* zoom controls */}
+      <div className={styles.zoom}>
+        <button
+          onClick={() =>
+            setView((v) => ({ ...v, scale: Math.max(0.1, v.scale / 1.25) }))
+          }
+        >
+          <Image src="/tools/minus.svg" alt="zoom out" width={50} height={50} />
+        </button>
+        <div>{Math.round(view.scale * 100)} %</div>
+        <button
+          onClick={() =>
+            setView((v) => ({ ...v, scale: Math.min(4, v.scale * 1.25) }))
+          }
+        >
+          <Image src="/tools/plus.svg" alt="zoom in" width={50} height={50} />
+        </button>
+      </div>
+
+      {/* drawing stage */}
+      <div className={styles.canvasWrapper}>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={(e) => {
+            startPan(e);
+            handlePointerDown(e);
+          }}
+          onPointerMove={(e) => {
+            movePan(e);
+            handlePointerMove(e);
+          }}
+          onPointerUp={(e) => {
+            endPan(e);
+            handlePointerUp(e);
+          }}
+          onWheel={handleWheel}
+          className={
+            tool === 'pencil' ? styles.pencilCursor : styles.grabbable
+          }
+        />
+      </div>
+    </>
+  );
 }

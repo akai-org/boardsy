@@ -1,0 +1,89 @@
+// ─────────────── variables ───────────────
+$panel-bg:       #fff
+$panel-radius:   10px
+$panel-shadow:   0 1px 4px rgba(0,0,0,.1)
+$hover-bg:       rgba(0,0,0,.05)
+
+// ─────────────── shared panel styles ───────────────
+.title, .tools, .zoom
+  display: flex
+  gap: 10px
+  background: $panel-bg
+  border-radius: $panel-radius
+  box-shadow: $panel-shadow
+  z-index: 1000
+
+  button
+    padding: .5em
+    background: none
+    border: none
+    border-radius: 4px
+    cursor: pointer
+    transition: background .2s
+
+    &:hover
+      background: $hover-bg
+
+// ─────────────── title (top-left) ───────────────
+.title
+  position: fixed
+  top: 12px
+  left: 12px
+  align-items: flex-end
+  padding: 6px 12px
+
+  h1
+    margin: 0 6px
+    font: 700 20px/1 sans-serif
+
+  h2
+    margin: 0
+    font: 400 16px/1 sans-serif
+    color: #666
+
+// ─────────────── tools (mid-left) ───────────────
+.tools
+  position: fixed
+  top: 50%
+  left: 12px
+  transform: translateY(-50%)
+  flex-direction: column
+  padding: 8px
+
+  button
+    width: 40px
+    height: 40px
+
+// ─────────────── zoom (bottom-right) ───────────────
+.zoom
+  position: fixed
+  bottom: 12px
+  right: 12px
+  align-items: center
+  padding: 8px
+
+  div
+    font-size: 12px
+    color: #333
+
+// ─────────────── canvas wrapper ───────────────
+.canvasWrapper
+  position: fixed
+  inset: 0
+  display: flex
+  justify-content: center
+  align-items: center
+  overflow: hidden   // prevents scroll-bars at large zoom
+
+  canvas
+    transition: transform .15s ease-in-out
+
+// ─────────────── cursors ───────────────
+.pencilCursor
+  cursor: url('/tools/pencil.svg') 24 4, crosshair
+
+.grabbable
+  cursor: grab
+
+.grabbable:active, .grabbing
+  cursor: grabbing
