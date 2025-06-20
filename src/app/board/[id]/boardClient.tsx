@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState, useEffect, useReducer } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -14,12 +14,23 @@ interface Stroke {
     width: number
 }
 
-export default function BoardClient({ data }: { data: Board }) {
+const MIN_ZOOM = 0.01
+const MAX_ZOOM = 4
+const STEP = 0.1
 
+
+export default function BoardClient({ data }: { data: Board }) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
     const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
-    const [zoom, setZoom] = useState<number>(1)
+    const currentStroke = useRef<Stroke | null>(null)
+    const nextId = useRef(1)
+
+    const [zoom, setZoom] = useState(1)
+    const zoomRef = useRef(zoom)
+    useEffect(() => {
+        zoomRef.current = zoom
+    }, [zoom])
 
     // grow to fill viewport
     const [size, setSize] = useState({ width: 0, height: 0 })
@@ -32,80 +43,127 @@ export default function BoardClient({ data }: { data: Board }) {
         return () => window.removeEventListener('resize', updateSize)
     }, [])
 
-
-
-    //pencil drawing logic 
     const [strokes, setStrokes] = useState<Stroke[]>([])
-    const currentStroke = useRef<Stroke | null>(null)
-    const nextId = useRef(1)
 
+    function zoomIn() {
+        setZoom((z) => Math.min(MAX_ZOOM, +(z + STEP).toFixed(2)))
+    }
+    function zoomOut() {
+        setZoom((z) => Math.max(MIN_ZOOM, +(z - STEP).toFixed(2)))
+    }
+
+    // pencil handlers
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas || activeTool !== 'pencil') return
-
-        const rect = canvas.getBoundingClientRect()
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        // Helpers to convert window coords → canvas coords
-        const toCanvas = (e: PointerEvent) => ({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-        })
+        // a helper that always re-reads the bounding rect & current zoom
+        const toCanvas = (e: PointerEvent) => {
+            const rect = canvas.getBoundingClientRect()
+            const z = zoomRef.current
+            return {
+                x: (e.clientX - rect.left) / z,
+                y: (e.clientY - rect.top) / z,
+            }
+        }
 
         function onPointerDown(e: PointerEvent) {
             if (!canvas) return
-            // start a new stroke
             const { x, y } = toCanvas(e)
             currentStroke.current = {
                 id: nextId.current++,
                 points: [{ x, y }],
-                color: 'black',   // pull from state when multiple line weights and colors will be available
-                width: 2
+                color: 'black',
+                width: 2,
             }
             canvas.setPointerCapture(e.pointerId)
         }
 
         function onPointerMove(e: PointerEvent) {
-            if (!ctx || !currentStroke.current) return
-            const { x, y } = toCanvas(e)
-            // append the point
-            currentStroke.current.points.push({ x, y })
-            // draw the latest segment live
-            const pts = currentStroke.current.points
-            const prev = pts[pts.length - 2]
-            ctx.strokeStyle = currentStroke.current.color
-            ctx.lineWidth = currentStroke.current.width
+            const stroke = currentStroke.current
+            if (!ctx || !stroke) return
+
+            // logical coords
+            const { x: lx, y: ly } = toCanvas(e)
+            stroke.points.push({ x: lx, y: ly })
+
+            // immediate draw in physical pixels
+            const prev = stroke.points[stroke.points.length - 2]!
+            const z = zoomRef.current
+            const dpr = window.devicePixelRatio || 1
+
+            ctx.strokeStyle = stroke.color
+            ctx.lineWidth = stroke.width
+
             ctx.beginPath()
-            ctx.moveTo(prev.x, prev.y)
-            ctx.lineTo(x, y)
+            ctx.moveTo(prev.x * z * dpr, prev.y * z * dpr)
+            ctx.lineTo(lx * z * dpr, ly * z * dpr)
             ctx.stroke()
         }
 
         function onPointerUp(e: PointerEvent) {
-            if (!canvas || !currentStroke.current) return
-            // finalize: add to strokes array
-            setStrokes(s => [...s, currentStroke.current!])
-            currentStroke.current = null
+            if (!canvas) return
+            const stroke = currentStroke.current
+            if (stroke) {
+                setStrokes((s) => [...s, stroke])
+                currentStroke.current = null
+            }
             canvas.releasePointerCapture(e.pointerId)
         }
 
-        // Attach listeners
+        // attach both canvas‐ and window‐based up/cancel listeners
         canvas.addEventListener('pointerdown', onPointerDown)
         canvas.addEventListener('pointermove', onPointerMove)
         canvas.addEventListener('pointerup', onPointerUp)
+        canvas.addEventListener('pointercancel', onPointerUp)
+        window.addEventListener('pointerup', onPointerUp)
 
-        // Cleanup
         return () => {
             canvas.removeEventListener('pointerdown', onPointerDown)
             canvas.removeEventListener('pointermove', onPointerMove)
             canvas.removeEventListener('pointerup', onPointerUp)
+            canvas.removeEventListener('pointercancel', onPointerUp)
+            window.removeEventListener('pointerup', onPointerUp)
         }
-    }, [activeTool, size.width, size.height])  // re-run if tool changes or canvas resizes
+    }, [activeTool, size.width, size.height])
 
+    // redrawing strokes (on zoom or size change)
+    useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
 
+        const dpr = window.devicePixelRatio || 1
 
-    
+        // resize the drawing buffer to match CSS size × DPR
+        canvas.width = size.width * dpr
+        canvas.height = size.height * dpr
+
+        // clear everything in raw pixels
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        // apply DPR and zoom in one go
+        ctx.save()
+        ctx.scale(dpr, dpr)
+        ctx.scale(zoom, zoom)
+
+        // replay all strokes in logical coords
+        for (const stroke of strokes) {
+            ctx.strokeStyle = stroke.color
+            ctx.lineWidth = stroke.width
+            ctx.beginPath()
+            stroke.points.forEach((p, i) => {
+                if (i === 0) ctx.moveTo(p.x, p.y)
+                else ctx.lineTo(p.x, p.y)
+            })
+            ctx.stroke()
+        }
+        ctx.restore()
+    }, [size.width, size.height, zoom, strokes])
 
     return (
         <>
@@ -132,19 +190,18 @@ export default function BoardClient({ data }: { data: Board }) {
             </div>
 
             <div className={styles.zoom}>
-                <button>
+                <button onClick={zoomOut}>
                     <Image src="/tools/minus.svg" alt="zoom out" width={50} height={50} />
                 </button>
-                <div>{(zoom * 100).toFixed(0)} %</div>
-                <button>
+                <div>{(zoom * 100).toFixed(0)} %</div>
+                <button onClick={zoomIn}>
                     <Image src="/tools/plus.svg" alt="zoom in" width={50} height={50} />
                 </button>
             </div>
 
             <canvas
                 ref={canvasRef}
-                width={size.width}
-                height={size.height}
+                style={{ width: size.width, height: size.height }}
                 className={
                     `${styles.canvas} ` +
                     (activeTool === 'pencil' ? styles.pencilCursor : styles.defaultCursor)
