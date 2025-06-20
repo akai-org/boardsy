@@ -1,23 +1,25 @@
 'use client'
 
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useReducer } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 
 import type { Board } from '@prisma/client'
-import styles from './board.module.css'
+import styles from './board.module.sass'
 
+interface Stroke {
+    id: number
+    points: { x: number; y: number }[]
+    color: string
+    width: number
+}
 
 export default function BoardClient({ data }: { data: Board }) {
 
-    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-    // track which tool is active
     const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
-
-    // refs to track drawing state & last coordinates
-    const isDrawingRef = useRef(false)
-    const lastPosRef = useRef({ x: 0, y: 0 })
+    const [zoom, setZoom] = useState<number>(1)
 
     // grow to fill viewport
     const [size, setSize] = useState({ width: 0, height: 0 })
@@ -30,49 +32,80 @@ export default function BoardClient({ data }: { data: Board }) {
         return () => window.removeEventListener('resize', updateSize)
     }, [])
 
-    // get a 2d context once
-    const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
+
+
+    //pencil drawing logic 
+    const [strokes, setStrokes] = useState<Stroke[]>([])
+    const currentStroke = useRef<Stroke | null>(null)
+    const nextId = useRef(1)
+
     useEffect(() => {
         const canvas = canvasRef.current
-        if (canvas) {
-            const ctx = canvas.getContext('2d')
-            if (ctx) {
-                ctx.lineCap = 'round'
-                ctx.lineWidth = 2
-                ctxRef.current = ctx
-            }
-        }
-    }, [])
+        if (!canvas || activeTool !== 'pencil') return
 
-    // handlers
-    function handleDown(e: React.MouseEvent) {
-        if (activeTool !== 'pencil') return
-        const rect = canvasRef.current!.getBoundingClientRect()
-        lastPosRef.current = {
+        const rect = canvas.getBoundingClientRect()
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        // Helpers to convert window coords → canvas coords
+        const toCanvas = (e: PointerEvent) => ({
             x: e.clientX - rect.left,
             y: e.clientY - rect.top,
+        })
+
+        function onPointerDown(e: PointerEvent) {
+            if (!canvas) return
+            // start a new stroke
+            const { x, y } = toCanvas(e)
+            currentStroke.current = {
+                id: nextId.current++,
+                points: [{ x, y }],
+                color: 'black',   // pull from state when multiple line weights and colors will be available
+                width: 2
+            }
+            canvas.setPointerCapture(e.pointerId)
         }
-        isDrawingRef.current = true
-    }
 
-    function handleMove(e: React.MouseEvent) {
-        if (!isDrawingRef.current || activeTool !== 'pencil') return
-        const rect = canvasRef.current!.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        function onPointerMove(e: PointerEvent) {
+            if (!ctx || !currentStroke.current) return
+            const { x, y } = toCanvas(e)
+            // append the point
+            currentStroke.current.points.push({ x, y })
+            // draw the latest segment live
+            const pts = currentStroke.current.points
+            const prev = pts[pts.length - 2]
+            ctx.strokeStyle = currentStroke.current.color
+            ctx.lineWidth = currentStroke.current.width
+            ctx.beginPath()
+            ctx.moveTo(prev.x, prev.y)
+            ctx.lineTo(x, y)
+            ctx.stroke()
+        }
 
-        const ctx = ctxRef.current!
-        ctx.beginPath()
-        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
-        ctx.lineTo(x, y)
-        ctx.stroke()
+        function onPointerUp(e: PointerEvent) {
+            if (!canvas || !currentStroke.current) return
+            // finalize: add to strokes array
+            setStrokes(s => [...s, currentStroke.current!])
+            currentStroke.current = null
+            canvas.releasePointerCapture(e.pointerId)
+        }
 
-        lastPosRef.current = { x, y }
-    }
+        // Attach listeners
+        canvas.addEventListener('pointerdown', onPointerDown)
+        canvas.addEventListener('pointermove', onPointerMove)
+        canvas.addEventListener('pointerup', onPointerUp)
 
-    function handleUp() {
-        isDrawingRef.current = false
-    }
+        // Cleanup
+        return () => {
+            canvas.removeEventListener('pointerdown', onPointerDown)
+            canvas.removeEventListener('pointermove', onPointerMove)
+            canvas.removeEventListener('pointerup', onPointerUp)
+        }
+    }, [activeTool, size.width, size.height])  // re-run if tool changes or canvas resizes
+
+
+
+    
 
     return (
         <>
@@ -102,7 +135,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 <button>
                     <Image src="/tools/minus.svg" alt="zoom out" width={50} height={50} />
                 </button>
-                <div>x %</div>
+                <div>{(zoom * 100).toFixed(0)} %</div>
                 <button>
                     <Image src="/tools/plus.svg" alt="zoom in" width={50} height={50} />
                 </button>
@@ -112,10 +145,6 @@ export default function BoardClient({ data }: { data: Board }) {
                 ref={canvasRef}
                 width={size.width}
                 height={size.height}
-                onMouseDown={handleDown}
-                onMouseMove={handleMove}
-                onMouseUp={handleUp}
-                onMouseLeave={handleUp}
                 className={
                     `${styles.canvas} ` +
                     (activeTool === 'pencil' ? styles.pencilCursor : styles.defaultCursor)
