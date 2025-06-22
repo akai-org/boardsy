@@ -24,10 +24,12 @@ export default function BoardClient({ data }: { data: Board }) {
 
     const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
 
+
     // pencil strokes
     const [strokes, setStrokes] = useState<Stroke[]>([])
     const currentStroke = useRef<Stroke | null>(null)
     const nextId = useRef(1)
+
 
     // zoom + pan
     const [zoom, setZoom] = useState(1)
@@ -54,6 +56,53 @@ export default function BoardClient({ data }: { data: Board }) {
         return () => window.removeEventListener('resize', updateSize)
     }, [])
 
+
+    // dpr optimisation
+    const [dpr, setDpr] = useState(1);
+    useEffect(() => {
+
+        const updateDpr = () => { setDpr(window.devicePixelRatio || 1) };
+
+        // run once on mount to pick up the real DPR
+        updateDpr();
+
+        // fallback on window resize
+        window.addEventListener('resize', updateDpr);
+
+        // matchMedia for DPR changes
+        const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        mql.addEventListener('change', updateDpr);
+
+        return () => {
+            window.removeEventListener('resize', updateDpr);
+            mql.removeEventListener('change', updateDpr);
+        };
+    }, []);
+
+
+    // canvas.getBoundingClientRect() optimisation
+    const rectRef = useRef<DOMRect | null>(null);
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        // helper to update the ref
+        function updateRect() {
+            if (!canvas) return;
+            rectRef.current = canvas.getBoundingClientRect();
+        }
+
+        updateRect();
+
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            window.removeEventListener('scroll', updateRect, true);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [size.width, size.height]);
+
+
     // scroll zoom
     useEffect(() => {
         const canvas = canvasRef.current
@@ -62,7 +111,8 @@ export default function BoardClient({ data }: { data: Board }) {
         function onWheel(e: WheelEvent) {
             e.preventDefault()
             if (!canvas) return
-            const rect = canvas.getBoundingClientRect()
+            const rect = rectRef.current
+            if (!rect) return
             const mouseX = e.clientX - rect.left
             const mouseY = e.clientY - rect.top
 
@@ -96,10 +146,8 @@ export default function BoardClient({ data }: { data: Board }) {
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        const dpr = window.devicePixelRatio || 1
-
         const toCanvas = (e: PointerEvent) => {
-            const rect = canvas.getBoundingClientRect()
+            const rect = rectRef.current!
             const z = zoomRef.current
             const { x: ox, y: oy } = offsetRef.current
             // convert to logical coords
@@ -135,7 +183,6 @@ export default function BoardClient({ data }: { data: Board }) {
             const prev = stroke.points[stroke.points.length - 2]!
             const z = zoomRef.current
             const { x: ox, y: oy } = offsetRef.current
-            const dpr = window.devicePixelRatio || 1
 
             // draw segment in _physical_ space without the current transform
             ctx.save()
@@ -173,7 +220,7 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointercancel', onPointerUp)
             window.removeEventListener('pointerup', onPointerUp)
         }
-    }, [activeTool, size.width, size.height])
+    }, [activeTool, size.width, size.height, dpr])
 
 
     // redrawing strokes (on zoom or size change)
@@ -183,7 +230,6 @@ export default function BoardClient({ data }: { data: Board }) {
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        const dpr = window.devicePixelRatio || 1
         // resize buffer
         canvas.width = size.width * dpr
         canvas.height = size.height * dpr
@@ -225,7 +271,7 @@ export default function BoardClient({ data }: { data: Board }) {
             ctx.stroke()
         }
 
-    }, [size.width, size.height, zoom, offset, strokes])
+    }, [size.width, size.height, zoom, offset, strokes, dpr])
 
 
     // functions for zoom buttons
@@ -237,7 +283,8 @@ export default function BoardClient({ data }: { data: Board }) {
             return
         }
 
-        const rect = canvas.getBoundingClientRect()
+        const rect = rectRef.current
+        if (!rect) return
         // center of the canvas in CSS pixels:
         const centerX = rect.width / 2
         const centerY = rect.height / 2
@@ -265,7 +312,8 @@ export default function BoardClient({ data }: { data: Board }) {
             return
         }
 
-        const rect = canvas.getBoundingClientRect()
+        const rect = rectRef.current
+        if (!rect) return
         const centerX = rect.width / 2
         const centerY = rect.height / 2
 
@@ -289,7 +337,6 @@ export default function BoardClient({ data }: { data: Board }) {
         let isPanning = false
         let startX = 0, startY = 0
         let startOffset = { x: 0, y: 0 }
-        const dpr = window.devicePixelRatio || 1
 
         // prevent the OS menu
         const onContextMenu = (e: MouseEvent) => e.preventDefault()
@@ -337,7 +384,7 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [/* no deps – we only care about offsetRef and zoomRef */])
+    }, [dpr])
 
 
     return (
