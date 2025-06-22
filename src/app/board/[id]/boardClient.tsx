@@ -523,10 +523,12 @@ export default function BoardClient({ data }: { data: Board }) {
         }
     }, [dpr])
 
-
-    // ctrl + z functionality
+    
+    // keyboard shortcuts functionality
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {
+
+            // Ctrl+Z: Undo last stroke
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
                 e.preventDefault()
                 setStrokes(prev => {
@@ -534,13 +536,20 @@ export default function BoardClient({ data }: { data: Board }) {
                     return prev.slice(0, -1)
                 })
             }
+            
+            // Delete: Remove selected strokes
+            if (e.key === 'Delete' && selectedIds.length > 0) {
+                e.preventDefault()
+                setStrokes(prev => prev.filter(stroke => !selectedIds.includes(stroke.id)))
+                setSelectedIds([])
+            }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [])
+    }, [selectedIds])
 
 
     return (
