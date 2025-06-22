@@ -19,11 +19,11 @@ const MAX_ZOOM = 4
 const STEP = 0.1
 
 export default function BoardClient({ data }: { data: Board }) {
-    
+
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
     const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
-    
+
     // pencil strokes
     const [strokes, setStrokes] = useState<Stroke[]>([])
     const currentStroke = useRef<Stroke | null>(null)
@@ -110,7 +110,7 @@ export default function BoardClient({ data }: { data: Board }) {
         }
 
         function onPointerDown(e: PointerEvent) {
-            if (!canvas) return
+            if (e.button !== 0 || !canvas) return
             const { x, y } = toCanvas(e)
             currentStroke.current = {
                 id: nextId.current++,
@@ -122,6 +122,8 @@ export default function BoardClient({ data }: { data: Board }) {
         }
 
         function onPointerMove(e: PointerEvent) {
+            // only draw while the left button is down
+            if (!(e.buttons & 1)) return
             const stroke = currentStroke.current
             if (!stroke || !ctx) return
 
@@ -207,9 +209,25 @@ export default function BoardClient({ data }: { data: Board }) {
             })
             ctx.stroke()
         }
+
+        if (currentStroke.current) {
+            const s = currentStroke.current
+            ctx.beginPath()
+            s.points.forEach((p, i) => {
+                if (i === 0) {
+                    ctx.moveTo(p.x, p.y)
+                } else {
+                    ctx.lineTo(p.x, p.y)
+                }
+            })
+            ctx.strokeStyle = s.color
+            ctx.lineWidth = s.width
+            ctx.stroke()
+        }
+
     }, [size.width, size.height, zoom, offset, strokes])
 
-    
+
     // functions for zoom buttons
     function zoomIn() {
         const canvas = canvasRef.current
@@ -265,6 +283,61 @@ export default function BoardClient({ data }: { data: Board }) {
         setZoom(newZoom)
     }
 
+    //right mouse button pan
+    useEffect(() => {
+        const canvas = canvasRef.current!
+        let isPanning = false
+        let startX = 0, startY = 0
+        let startOffset = { x: 0, y: 0 }
+        const dpr = window.devicePixelRatio || 1
+
+        // prevent the OS menu
+        const onContextMenu = (e: MouseEvent) => e.preventDefault()
+        canvas.addEventListener('contextmenu', onContextMenu)
+
+        const onPointerDown = (e: PointerEvent) => {
+            if (e.button !== 2) return        // only right-button
+            e.preventDefault()
+            canvas.setPointerCapture(e.pointerId)
+            isPanning = true
+            startX = e.clientX
+            startY = e.clientY
+            startOffset = { ...offsetRef.current }
+        }
+
+        const onPointerMove = (e: PointerEvent) => {
+            if (!isPanning) return
+            e.preventDefault()
+            // how far we’ve moved in physical pixels
+            const dxPx = e.clientX - startX
+            const dyPx = e.clientY - startY
+            // convert back into logical units
+            const z = zoomRef.current
+            const dx = dxPx / (z * dpr)
+            const dy = dyPx / (z * dpr)
+            setOffset({ x: startOffset.x + dx, y: startOffset.y + dy })
+        }
+
+        const onPointerUp = (e: PointerEvent) => {
+            if (e.button !== 2) return
+            isPanning = false
+            canvas.releasePointerCapture(e.pointerId)
+        }
+
+        canvas.addEventListener('pointerdown', onPointerDown)
+        canvas.addEventListener('pointermove', onPointerMove)
+        canvas.addEventListener('pointerup', onPointerUp)
+        canvas.addEventListener('pointercancel', onPointerUp)
+        // no need for window listener – capture on canvas is enough
+
+        return () => {
+            canvas.removeEventListener('contextmenu', onContextMenu)
+            canvas.removeEventListener('pointerdown', onPointerDown)
+            canvas.removeEventListener('pointermove', onPointerMove)
+            canvas.removeEventListener('pointerup', onPointerUp)
+            canvas.removeEventListener('pointercancel', onPointerUp)
+        }
+    }, [/* no deps – we only care about offsetRef and zoomRef */])
 
 
     return (
