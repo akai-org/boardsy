@@ -56,7 +56,6 @@ export default function BoardClient({ data }: { data: Board }) {
 
     const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
-    //console.log(activeTool)
 
     // selected rectangle
     const [dragRect, setDragRect] = useState<Rect | null>(null)
@@ -147,6 +146,18 @@ export default function BoardClient({ data }: { data: Board }) {
     }, [size.width, size.height]);
 
 
+    // custom hook for coordinate transformation
+    const toLogicalCoords = useCallback((e: PointerEvent) => {
+        const rect = rectRef.current!
+        const z = zoomRef.current
+        const { x: ox, y: oy } = offsetRef.current
+        return {
+            x: (e.clientX - rect.left) / z - ox,
+            y: (e.clientY - rect.top) / z - oy,
+        }
+    }, [])
+    
+    
     // selection functionality
     useEffect(() => {
         const canvas = canvasRef.current
@@ -154,19 +165,10 @@ export default function BoardClient({ data }: { data: Board }) {
 
         let startX = 0, startY = 0
 
-        function toLogical(e: PointerEvent) {
-            const rect = rectRef.current!            // cached getBoundingClientRect
-            const z = zoomRef.current
-            const { x: ox, y: oy } = offsetRef.current
-            return {
-                x: (e.clientX - rect.left) / z - ox,
-                y: (e.clientY - rect.top) / z - oy,
-            }
-        }
 
         function onPointerDown(e: PointerEvent) {
             if (activeTool !== Tools.SELECTOR || e.button !== 0 || !canvas) return
-            const p = toLogical(e)
+            const p = toLogicalCoords(e)
             startX = p.x; startY = p.y
             updateDragRect({ x: p.x, y: p.y, width: 0, height: 0 })
             canvas.setPointerCapture(e.pointerId)
@@ -176,7 +178,7 @@ export default function BoardClient({ data }: { data: Board }) {
             if (activeTool !== Tools.SELECTOR) return
             const r = dragRectRef.current
             if (!r) return
-            const p = toLogical(e)
+            const p = toLogicalCoords(e)
             updateDragRect({
                 x: Math.min(startX, p.x),
                 y: Math.min(startY, p.y),
@@ -217,7 +219,7 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [activeTool, strokes, updateDragRect])
+    }, [activeTool, strokes, updateDragRect, toLogicalCoords])
 
     useEffect(() => {
         updateDragRect(null);
@@ -272,24 +274,13 @@ export default function BoardClient({ data }: { data: Board }) {
     // pencil handlers
     useEffect(() => {
         const canvas = canvasRef.current
-        if (!canvas || activeTool !== 'pencil') return
+        if (!canvas || activeTool !== Tools.PENCIL) return
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        const toCanvas = (e: PointerEvent) => {
-            const rect = rectRef.current!
-            const z = zoomRef.current
-            const { x: ox, y: oy } = offsetRef.current
-            // convert to logical coords
-            return {
-                x: (e.clientX - rect.left) / z - ox,
-                y: (e.clientY - rect.top) / z - oy,
-            }
-        }
-
         function onPointerDown(e: PointerEvent) {
             if (e.button !== 0 || !canvas) return
-            const { x, y } = toCanvas(e)
+            const { x, y } = toLogicalCoords(e)
             currentStroke.current = {
                 id: nextId.current++,
                 points: [{ x, y }],
@@ -306,7 +297,7 @@ export default function BoardClient({ data }: { data: Board }) {
             if (!stroke || !ctx) return
 
             // get new logical point
-            const { x: lx, y: ly } = toCanvas(e)
+            const { x: lx, y: ly } = toLogicalCoords(e)
             stroke.points.push({ x: lx, y: ly })
 
             // compute previous point + pan/zoom/DPR
@@ -350,7 +341,7 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointercancel', onPointerUp)
             window.removeEventListener('pointerup', onPointerUp)
         }
-    }, [activeTool, size.width, size.height, dpr])
+    }, [activeTool, size.width, size.height, dpr, toLogicalCoords])
 
 
     // redrawing strokes (on zoom or size change)
