@@ -16,7 +16,8 @@
     "jose": "^6.0.10",
     "next": "^15.4.0-canary.29",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sass": "^1.89.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

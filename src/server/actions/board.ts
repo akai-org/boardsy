@@ -1,5 +1,6 @@
 'use server'
 
+import type { Board } from '@prisma/client'
 import { ActionResponse } from "@/types/global";
 import { getSession } from "../auth";
 import prisma from "../db";
@@ -43,6 +44,53 @@ export async function createBoard(formData: FormData): Promise<ActionResponse> {
     }
 }
 
+
+interface BoardResponse extends ActionResponse {
+  board?: Board
+}
+
+export async function getBoard(boardid: string): Promise<BoardResponse> {
+
+    const session = await getSession()
+
+    if (!session)
+        return {
+            success: false,
+            message: 'Please log in',
+            error: 'Please log in'
+        }
+
+    try {
+
+        const board = await prisma.board.findUnique({
+            where: {
+                id: boardid
+            }
+        })
+
+        if (!board)
+            return {
+                success: false,
+                message: 'Board does not exist',
+                error: 'Board does not exist'
+            }
+
+        return {
+            success: true,
+            message: 'Board fetched successfully',
+            board: board
+        }
+
+    } catch (e) {
+
+        console.log(e)
+        return {
+            success: false,
+            message: 'Server error',
+            error: 'Server error'
+        }
+    }
+}
 
 type SortOption = 'Last edited' | 'Created at' | 'Alphabetically'
 export async function getBoards(displayOption: SortOption) {

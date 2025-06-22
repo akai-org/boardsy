@@ -5,6 +5,7 @@ import { deleteBoard, getBoards, renameBoard } from '@/server/actions/board';
 import styles from './dashboard.module.css';
 import Image from 'next/image';
 import { ActionResponse } from '@/types/global';
+import { useRouter } from 'next/navigation';
 
 
 type SortOption = 'Last edited' | 'Created at' | 'Alphabetically';
@@ -138,8 +139,14 @@ function Board({ data, setBoards }: { data: Board, setBoards: React.Dispatch<Rea
         setMenuVisible((prev) => !prev);
     };
 
+    const router = useRouter()
+
+    const goToBoard = () => {
+        router.push(`../board/${data.id}`)
+    }
+
     return (
-        <li className={styles.board} key={data.id}>
+        <li onClick={() => goToBoard()} className={styles.board} key={data.id}>
             <div className={styles.gradient} onMouseLeave={() => setMenuVisible(false)}>
                 <button
                     className={styles.hoverButton}
