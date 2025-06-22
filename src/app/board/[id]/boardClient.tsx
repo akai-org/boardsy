@@ -56,7 +56,6 @@ export default function BoardClient({ data }: { data: Board }) {
 
     const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
-
     // selected rectangle
     const [dragRect, setDragRect] = useState<Rect | null>(null)
     const dragRectRef = useRef<Rect | null>(null)
@@ -73,6 +72,10 @@ export default function BoardClient({ data }: { data: Board }) {
     const currentStroke = useRef<Stroke | null>(null)
     const nextId = useRef(1)
 
+    // moving selected items around
+    const actionRef = useRef<'move' | 'select' | null>(null)
+    const dragStartRef = useRef<{ x: number, y: number } | null>(null)
+    const originalRef = useRef<Map<number, { x: number, y: number }[]>>(new Map())
 
     // zoom + pan
     const [zoom, setZoom] = useState(1)
@@ -101,49 +104,49 @@ export default function BoardClient({ data }: { data: Board }) {
 
 
     // dpr optimisation
-    const [dpr, setDpr] = useState(1);
+    const [dpr, setDpr] = useState(1)
     useEffect(() => {
 
-        const updateDpr = () => { setDpr(window.devicePixelRatio || 1) };
+        const updateDpr = () => { setDpr(window.devicePixelRatio || 1) }
 
         // run once on mount to pick up the real DPR
-        updateDpr();
+        updateDpr()
 
         // fallback on window resize
-        window.addEventListener('resize', updateDpr);
+        window.addEventListener('resize', updateDpr)
 
         // matchMedia for DPR changes
-        const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-        mql.addEventListener('change', updateDpr);
+        const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+        mql.addEventListener('change', updateDpr)
 
         return () => {
-            window.removeEventListener('resize', updateDpr);
-            mql.removeEventListener('change', updateDpr);
-        };
-    }, []);
+            window.removeEventListener('resize', updateDpr)
+            mql.removeEventListener('change', updateDpr)
+        }
+    }, [])
 
 
     // canvas.getBoundingClientRect() optimisation
-    const rectRef = useRef<DOMRect | null>(null);
+    const rectRef = useRef<DOMRect | null>(null)
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+        const canvas = canvasRef.current
+        if (!canvas) return
 
         function updateRect() {
-            if (!canvas) return;
-            rectRef.current = canvas.getBoundingClientRect();
+            if (!canvas) return
+            rectRef.current = canvas.getBoundingClientRect()
         }
 
-        updateRect();
+        updateRect()
 
-        window.addEventListener('resize', updateRect);
-        window.addEventListener('scroll', updateRect, true);
+        window.addEventListener('resize', updateRect)
+        window.addEventListener('scroll', updateRect, true)
 
         return () => {
-            window.removeEventListener('resize', updateRect);
-            window.removeEventListener('scroll', updateRect, true);
-        };
-    }, [size.width, size.height]);
+            window.removeEventListener('resize', updateRect)
+            window.removeEventListener('scroll', updateRect, true)
+        }
+    }, [size.width, size.height])
 
 
     // custom hook for coordinate transformation
@@ -156,56 +159,99 @@ export default function BoardClient({ data }: { data: Board }) {
             y: (e.clientY - rect.top) / z - oy,
         }
     }, [])
-    
-    
-    // selection functionality
+
+
+
+
+
+    // selection functionality with select items and move selected items mode
     useEffect(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-
-        let startX = 0, startY = 0
-
-
+        const canvas = canvasRef.current!
         function onPointerDown(e: PointerEvent) {
-            if (activeTool !== Tools.SELECTOR || e.button !== 0 || !canvas) return
+            if (activeTool !== Tools.SELECTOR || e.button !== 0) return
             const p = toLogicalCoords(e)
-            startX = p.x; startY = p.y
-            updateDragRect({ x: p.x, y: p.y, width: 0, height: 0 })
+
+            // do we hit any selected stroke?
+            const hitId = selectedIds.find(id => {
+                const s = strokes.find(s => s.id === id)!
+                const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
+                const bx = Math.min(...xs), by = Math.min(...ys)
+                const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
+                return p.x >= bx && p.x <= bx + bw && p.y >= by && p.y <= by + bh
+            })
+
+            if (hitId != null) {
+                // MOVE MODE
+                actionRef.current = 'move'
+                dragStartRef.current = p
+                // snapshot all selected strokes
+                const snapshot = new Map<number, { x: number, y: number }[]>()
+                for (const id of selectedIds) {
+                    const s = strokes.find(s => s.id === id)!
+                    snapshot.set(id, s.points.map(pt => ({ ...pt })))
+                }
+                originalRef.current = snapshot
+            } else {
+                // SELECT MODE
+                actionRef.current = 'select'
+                dragStartRef.current = p
+                updateDragRect({ x: p.x, y: p.y, width: 0, height: 0 })
+            }
             canvas.setPointerCapture(e.pointerId)
         }
 
         function onPointerMove(e: PointerEvent) {
-            if (activeTool !== Tools.SELECTOR) return
-            const r = dragRectRef.current
-            if (!r) return
+            const mode = actionRef.current
+            if (!mode) return
             const p = toLogicalCoords(e)
-            updateDragRect({
-                x: Math.min(startX, p.x),
-                y: Math.min(startY, p.y),
-                width: Math.abs(p.x - startX),
-                height: Math.abs(p.y - startY),
-            })
+            const start = dragStartRef.current!
+            if (mode === 'select') {
+                updateDragRect({
+                    x: Math.min(start.x, p.x),
+                    y: Math.min(start.y, p.y),
+                    width: Math.abs(p.x - start.x),
+                    height: Math.abs(p.y - start.y),
+                })
+            } else {
+                // MOVE MODE: translate selected strokes
+                const dx = p.x - start.x
+                const dy = p.y - start.y
+                setStrokes(prev =>
+                    prev.map(s => {
+                        if (!selectedIds.includes(s.id)) return s
+                        const orig = originalRef.current.get(s.id)!
+                        return {
+                            ...s,
+                            points: orig.map(pt => ({ x: pt.x + dx, y: pt.y + dy }))
+                        }
+                    })
+                )
+            }
         }
 
         function onPointerUp(e: PointerEvent) {
-            if (activeTool !== Tools.SELECTOR || !canvas) return
-            const r = dragRectRef.current
-            if (!r) return
-            // AABB hit‐test against every stroke’s bbox:
-            const hits = strokes
-                .filter(s => {
-                    const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
-                    const bx = Math.min(...xs), by = Math.min(...ys)
-                    const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
-                    return !(
-                        bx + bw < r.x || bx > r.x + r.width ||
-                        by + bh < r.y || by > r.y + r.height
-                    )
-                })
-                .map(s => s.id)
-
-            setSelectedIds(hits)
-            updateDragRect(null)
+            const mode = actionRef.current
+            if (mode === 'select') {
+                // finalize selection
+                const r = dragRectRef.current
+                if (r) {
+                    const hits = strokes
+                        .filter(s => {
+                            const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
+                            const bx = Math.min(...xs), by = Math.min(...ys)
+                            const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
+                            return !(
+                                bx + bw < r.x || bx > r.x + r.width ||
+                                by + bh < r.y || by > r.y + r.height
+                            )
+                        })
+                        .map(s => s.id)
+                    setSelectedIds(hits)
+                }
+                updateDragRect(null)
+            }
+            actionRef.current = null
+            dragStartRef.current = null
             canvas.releasePointerCapture(e.pointerId)
         }
 
@@ -219,21 +265,23 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [activeTool, strokes, updateDragRect, toLogicalCoords])
+    }, [activeTool, strokes, selectedIds, toLogicalCoords, updateDragRect])
 
     useEffect(() => {
-        updateDragRect(null);
-        currentStroke.current = null;
-    }, [activeTool, updateDragRect]);
+        updateDragRect(null)
+        currentStroke.current = null
+    }, [activeTool, updateDragRect])
 
+    // if a tool other than selector is activated, clear the selection
     useEffect(() => {
         if (activeTool !== Tools.SELECTOR) {
-            // clear any live marquee…
+            // clear any live marquee
             updateDragRect(null)
-            // …and clear selection
+            // clear selection
             setSelectedIds([])
         }
     }, [activeTool, updateDragRect])
+
 
     // scroll zoom
     useEffect(() => {
@@ -351,19 +399,19 @@ export default function BoardClient({ data }: { data: Board }) {
         const ctx = c.getContext('2d')
         if (!ctx) return
 
-        // 1) resize buffer for HiDPI
+        // resize buffer for HiDPI
         c.width = size.width * dpr
         c.height = size.height * dpr
 
-        // 2) clear
+        // clear
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.clearRect(0, 0, c.width, c.height)
 
-        // 3) apply zoom/pan (with DPR)
+        // apply zoom/pan (with DPR)
         const scale = zoom * dpr
         ctx.setTransform(scale, 0, 0, scale, offset.x * scale, offset.y * scale)
 
-        // 4) draw saved strokes
+        // draw saved strokes
         for (const s of strokes) {
             ctx.strokeStyle = s.color
             ctx.lineWidth = s.width
@@ -372,7 +420,7 @@ export default function BoardClient({ data }: { data: Board }) {
             ctx.stroke()
         }
 
-        // 5) draw in-flight stroke
+        // draw in-flight stroke
         if (currentStroke.current) {
             const s = currentStroke.current
             ctx.strokeStyle = s.color
@@ -382,7 +430,7 @@ export default function BoardClient({ data }: { data: Board }) {
             ctx.stroke()
         }
 
-        // 6) draw marquee or selection boxes
+        // draw marquee or selection boxes
         ctx.save()
         ctx.strokeStyle = 'rgba(0,120,255,0.8)'
         ctx.lineWidth = 1 / zoom
@@ -480,7 +528,7 @@ export default function BoardClient({ data }: { data: Board }) {
         canvas.addEventListener('contextmenu', onContextMenu)
 
         const onPointerDown = (e: PointerEvent) => {
-            if (e.button !== 2) return        // only right-button
+            if (e.button !== 2) return // only right-button
             e.preventDefault()
             canvas.setPointerCapture(e.pointerId)
             isPanning = true
@@ -512,7 +560,6 @@ export default function BoardClient({ data }: { data: Board }) {
         canvas.addEventListener('pointermove', onPointerMove)
         canvas.addEventListener('pointerup', onPointerUp)
         canvas.addEventListener('pointercancel', onPointerUp)
-        // no need for window listener – capture on canvas is enough
 
         return () => {
             canvas.removeEventListener('contextmenu', onContextMenu)
@@ -523,7 +570,7 @@ export default function BoardClient({ data }: { data: Board }) {
         }
     }, [dpr])
 
-    
+
     // keyboard shortcuts functionality
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {
@@ -536,7 +583,7 @@ export default function BoardClient({ data }: { data: Board }) {
                     return prev.slice(0, -1)
                 })
             }
-            
+
             // Delete: Remove selected strokes
             if (e.key === 'Delete' && selectedIds.length > 0) {
                 e.preventDefault()
@@ -570,7 +617,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 <button onClick={zoomOut}>
                     <Image src="/tools/minus.svg" alt="zoom out" width={50} height={50} />
                 </button>
-                <div>{(zoom * 100).toFixed(0)} %</div>
+                <div>{(zoom * 100).toFixed(0)} %</div>
                 <button onClick={zoomIn}>
                     <Image src="/tools/plus.svg" alt="zoom in" width={50} height={50} />
                 </button>
