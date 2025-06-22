@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -14,16 +14,60 @@ interface Stroke {
     width: number
 }
 
+interface Rect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
 const MIN_ZOOM = 0.01
 const MAX_ZOOM = 4
 const STEP = 0.1
+
+enum Tools {
+    SELECTOR = "selector",
+    PENCIL = "pencil",
+    TEXT = "text",
+    SHAPES = "shapes"
+}
+
+function ToolBar({ activeTool, setActiveTool }: {
+    activeTool: Tools,
+    setActiveTool: React.Dispatch<React.SetStateAction<Tools>>
+}) {
+
+    return (
+        <div className={styles.tools}>
+            {Object.values(Tools).map((tool) => {
+                return (
+                    <button key={tool} className={tool === activeTool ? styles.selectedTool : ''} onClick={() => setActiveTool(tool)}>
+                        <Image src={`/tools/${tool}.svg`} alt={`${tool}`} width={50} height={50} />
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
 
 export default function BoardClient({ data }: { data: Board }) {
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-    const [activeTool, setActiveTool] = useState<'selector' | 'pencil' | 'text' | 'shapes'>('selector')
+    const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
+    //console.log(activeTool)
+
+    // selected rectangle
+    const [dragRect, setDragRect] = useState<Rect | null>(null)
+    const dragRectRef = useRef<Rect | null>(null)
+    const updateDragRect = useCallback((r: Rect | null) => {
+        dragRectRef.current = r
+        setDragRect(r)
+    }, [])
+
+    // selected items
+    const [selectedIds, setSelectedIds] = useState<number[]>([])
 
     // pencil strokes
     const [strokes, setStrokes] = useState<Stroke[]>([])
@@ -86,7 +130,6 @@ export default function BoardClient({ data }: { data: Board }) {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // helper to update the ref
         function updateRect() {
             if (!canvas) return;
             rectRef.current = canvas.getBoundingClientRect();
@@ -95,13 +138,100 @@ export default function BoardClient({ data }: { data: Board }) {
         updateRect();
 
         window.addEventListener('resize', updateRect);
+        window.addEventListener('scroll', updateRect, true);
 
         return () => {
-            window.removeEventListener('scroll', updateRect, true);
             window.removeEventListener('resize', updateRect);
+            window.removeEventListener('scroll', updateRect, true);
         };
     }, [size.width, size.height]);
 
+
+    // selection functionality
+    useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        let startX = 0, startY = 0
+
+        function toLogical(e: PointerEvent) {
+            const rect = rectRef.current!            // cached getBoundingClientRect
+            const z = zoomRef.current
+            const { x: ox, y: oy } = offsetRef.current
+            return {
+                x: (e.clientX - rect.left) / z - ox,
+                y: (e.clientY - rect.top) / z - oy,
+            }
+        }
+
+        function onPointerDown(e: PointerEvent) {
+            if (activeTool !== Tools.SELECTOR || e.button !== 0 || !canvas) return
+            const p = toLogical(e)
+            startX = p.x; startY = p.y
+            updateDragRect({ x: p.x, y: p.y, width: 0, height: 0 })
+            canvas.setPointerCapture(e.pointerId)
+        }
+
+        function onPointerMove(e: PointerEvent) {
+            if (activeTool !== Tools.SELECTOR) return
+            const r = dragRectRef.current
+            if (!r) return
+            const p = toLogical(e)
+            updateDragRect({
+                x: Math.min(startX, p.x),
+                y: Math.min(startY, p.y),
+                width: Math.abs(p.x - startX),
+                height: Math.abs(p.y - startY),
+            })
+        }
+
+        function onPointerUp(e: PointerEvent) {
+            if (activeTool !== Tools.SELECTOR || !canvas) return
+            const r = dragRectRef.current
+            if (!r) return
+            // AABB hit‐test against every stroke’s bbox:
+            const hits = strokes
+                .filter(s => {
+                    const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
+                    const bx = Math.min(...xs), by = Math.min(...ys)
+                    const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
+                    return !(
+                        bx + bw < r.x || bx > r.x + r.width ||
+                        by + bh < r.y || by > r.y + r.height
+                    )
+                })
+                .map(s => s.id)
+
+            setSelectedIds(hits)
+            updateDragRect(null)
+            canvas.releasePointerCapture(e.pointerId)
+        }
+
+        canvas.addEventListener('pointerdown', onPointerDown)
+        canvas.addEventListener('pointermove', onPointerMove)
+        canvas.addEventListener('pointerup', onPointerUp)
+        canvas.addEventListener('pointercancel', onPointerUp)
+        return () => {
+            canvas.removeEventListener('pointerdown', onPointerDown)
+            canvas.removeEventListener('pointermove', onPointerMove)
+            canvas.removeEventListener('pointerup', onPointerUp)
+            canvas.removeEventListener('pointercancel', onPointerUp)
+        }
+    }, [activeTool, strokes, updateDragRect])
+
+    useEffect(() => {
+        updateDragRect(null);
+        currentStroke.current = null;
+    }, [activeTool, updateDragRect]);
+
+    useEffect(() => {
+        if (activeTool !== Tools.SELECTOR) {
+            // clear any live marquee…
+            updateDragRect(null)
+            // …and clear selection
+            setSelectedIds([])
+        }
+    }, [activeTool, updateDragRect])
 
     // scroll zoom
     useEffect(() => {
@@ -225,53 +355,69 @@ export default function BoardClient({ data }: { data: Board }) {
 
     // redrawing strokes (on zoom or size change)
     useEffect(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
+        const c = canvasRef.current
+        if (!c) return
+        const ctx = c.getContext('2d')
         if (!ctx) return
 
-        // resize buffer
-        canvas.width = size.width * dpr
-        canvas.height = size.height * dpr
+        // 1) resize buffer for HiDPI
+        c.width = size.width * dpr
+        c.height = size.height * dpr
 
-        // clear
+        // 2) clear
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.clearRect(0, 0, c.width, c.height)
 
-        // set zoom & pan transform
-        const a = zoom * dpr
-        const e = offset.x * a
-        const f = offset.y * a
-        ctx.setTransform(a, 0, 0, a, e, f)
+        // 3) apply zoom/pan (with DPR)
+        const scale = zoom * dpr
+        ctx.setTransform(scale, 0, 0, scale, offset.x * scale, offset.y * scale)
 
-        // replay all strokes
-        for (const stroke of strokes) {
-            ctx.strokeStyle = stroke.color
-            ctx.lineWidth = stroke.width
-            ctx.beginPath()
-            stroke.points.forEach((p, i) => {
-                if (i === 0) ctx.moveTo(p.x, p.y)
-                else ctx.lineTo(p.x, p.y)
-            })
-            ctx.stroke()
-        }
-
-        if (currentStroke.current) {
-            const s = currentStroke.current
-            ctx.beginPath()
-            s.points.forEach((p, i) => {
-                if (i === 0) {
-                    ctx.moveTo(p.x, p.y)
-                } else {
-                    ctx.lineTo(p.x, p.y)
-                }
-            })
+        // 4) draw saved strokes
+        for (const s of strokes) {
             ctx.strokeStyle = s.color
             ctx.lineWidth = s.width
+            ctx.beginPath()
+            s.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
             ctx.stroke()
         }
 
-    }, [size.width, size.height, zoom, offset, strokes, dpr])
+        // 5) draw in-flight stroke
+        if (currentStroke.current) {
+            const s = currentStroke.current
+            ctx.strokeStyle = s.color
+            ctx.lineWidth = s.width
+            ctx.beginPath()
+            s.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+            ctx.stroke()
+        }
+
+        // 6) draw marquee or selection boxes
+        ctx.save()
+        ctx.strokeStyle = 'rgba(0,120,255,0.8)'
+        ctx.lineWidth = 1 / zoom
+        ctx.setLineDash([4 / zoom, 2 / zoom])
+
+        if (dragRect) {
+            ctx.strokeRect(
+                dragRect.x,
+                dragRect.y,
+                dragRect.width,
+                dragRect.height
+            )
+        } else {
+            for (const id of selectedIds) {
+                const s = strokes.find(s => s.id === id)!
+                const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
+                const bx = Math.min(...xs), by = Math.min(...ys)
+                const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
+
+                ctx.setLineDash([])
+                ctx.lineWidth = 2 / zoom
+                ctx.strokeRect(bx, by, bw, bh)
+            }
+        }
+        ctx.restore()
+    }, [size.width, size.height, zoom, offset, strokes, dragRect, selectedIds, dpr])
 
 
     // functions for zoom buttons
@@ -415,20 +561,10 @@ export default function BoardClient({ data }: { data: Board }) {
                 <h2>{data.name}</h2>
             </div>
 
-            <div className={styles.tools}>
-                <button onClick={() => setActiveTool('selector')}>
-                    <Image src="/tools/selector.svg" alt="selector" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('pencil')}>
-                    <Image src="/tools/pencil.svg" alt="pencil" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('text')}>
-                    <Image src="/tools/text.svg" alt="text" width={50} height={50} />
-                </button>
-                <button onClick={() => setActiveTool('shapes')}>
-                    <Image src="/tools/shapes.svg" alt="shapes" width={50} height={50} />
-                </button>
-            </div>
+            <ToolBar
+                activeTool={activeTool}
+                setActiveTool={setActiveTool}
+            />
 
             <div className={styles.zoom}>
                 <button onClick={zoomOut}>
