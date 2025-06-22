@@ -387,6 +387,25 @@ export default function BoardClient({ data }: { data: Board }) {
     }, [dpr])
 
 
+    // ctrl + z functionality
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault()
+                setStrokes(prev => {
+                    if (prev.length === 0) return prev
+                    return prev.slice(0, -1)
+                })
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+        }
+    }, [])
+
+
     return (
         <>
             <div className={styles.title}>
