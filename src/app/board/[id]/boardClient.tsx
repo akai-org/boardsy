@@ -9,9 +9,24 @@ import styles from './board.module.sass'
 
 interface Stroke {
     id: number
+    type: 'stroke',
     points: { x: number; y: number }[]
     color: string
     width: number
+}
+interface ImageObject {
+    id: number,
+    type: 'image',
+    url: string
+}
+
+
+type BoardItem = Stroke | ImageObject
+
+interface ImagePasteResponse {
+    success: boolean,
+    imageObject?: ImageObject,
+    error?: string
 }
 
 interface Rect {
@@ -52,7 +67,7 @@ function ToolBar({ activeTool, setActiveTool }: {
 
 export default function BoardClient({ data }: { data: Board }) {
 
-    const canvasRef = useRef<HTMLCanvasElement | null>(null)
+   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
     const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
@@ -67,8 +82,8 @@ export default function BoardClient({ data }: { data: Board }) {
     // selected items
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
-    // pencil strokes
-    const [strokes, setStrokes] = useState<Stroke[]>([])
+    // items on board
+    const [items, setItems] = useState<Stroke[]>([])
     const currentStroke = useRef<Stroke | null>(null)
     const nextId = useRef(1)
 
@@ -171,9 +186,9 @@ export default function BoardClient({ data }: { data: Board }) {
             if (activeTool !== Tools.SELECTOR || e.button !== 0) return
             const p = toLogicalCoords(e)
 
-            // do we hit any selected stroke?
+            // do we hit any selected item?
             const hitId = selectedIds.find(id => {
-                const s = strokes.find(s => s.id === id)!
+                const s = items.find(s => s.id === id)!
                 const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
                 const bx = Math.min(...xs), by = Math.min(...ys)
                 const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
@@ -184,10 +199,10 @@ export default function BoardClient({ data }: { data: Board }) {
                 // MOVE MODE
                 actionRef.current = 'move'
                 dragStartRef.current = p
-                // snapshot all selected strokes
+                // snapshot all selected items
                 const snapshot = new Map<number, { x: number, y: number }[]>()
                 for (const id of selectedIds) {
-                    const s = strokes.find(s => s.id === id)!
+                    const s = items.find(s => s.id === id)!
                     snapshot.set(id, s.points.map(pt => ({ ...pt })))
                 }
                 originalRef.current = snapshot
@@ -213,10 +228,10 @@ export default function BoardClient({ data }: { data: Board }) {
                     height: Math.abs(p.y - start.y),
                 })
             } else {
-                // MOVE MODE: translate selected strokes
+                // MOVE MODE: translate selected items
                 const dx = p.x - start.x
                 const dy = p.y - start.y
-                setStrokes(prev =>
+                setItems(prev =>
                     prev.map(s => {
                         if (!selectedIds.includes(s.id)) return s
                         const orig = originalRef.current.get(s.id)!
@@ -235,7 +250,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 // finalize selection
                 const r = dragRectRef.current
                 if (r) {
-                    const hits = strokes
+                    const hits = items
                         .filter(s => {
                             const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
                             const bx = Math.min(...xs), by = Math.min(...ys)
@@ -265,7 +280,7 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [activeTool, strokes, selectedIds, toLogicalCoords, updateDragRect])
+    }, [activeTool, items, selectedIds, toLogicalCoords, updateDragRect])
 
     useEffect(() => {
         updateDragRect(null)
@@ -369,7 +384,7 @@ export default function BoardClient({ data }: { data: Board }) {
             if (!canvas) return
             const stroke = currentStroke.current
             if (stroke) {
-                setStrokes((s) => [...s, stroke])
+                setItems((s) => [...s, stroke])
                 currentStroke.current = null
             }
             canvas.releasePointerCapture(e.pointerId)
@@ -392,7 +407,7 @@ export default function BoardClient({ data }: { data: Board }) {
     }, [activeTool, size.width, size.height, dpr, toLogicalCoords])
 
 
-    // redrawing strokes (on zoom or size change)
+    // redrawing items (on zoom or size change)
     useEffect(() => {
         const c = canvasRef.current
         if (!c) return
@@ -411,12 +426,12 @@ export default function BoardClient({ data }: { data: Board }) {
         const scale = zoom * dpr
         ctx.setTransform(scale, 0, 0, scale, offset.x * scale, offset.y * scale)
 
-        // draw saved strokes
-        for (const s of strokes) {
-            ctx.strokeStyle = s.color
-            ctx.lineWidth = s.width
+        // draw saved strokes wroc
+        for (const stroke of items.filter(item => item.type === 'stroke')) {
+            ctx.strokeStyle = stroke.color
+            ctx.lineWidth = stroke.width
             ctx.beginPath()
-            s.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+            stroke.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
             ctx.stroke()
         }
 
@@ -445,7 +460,7 @@ export default function BoardClient({ data }: { data: Board }) {
             )
         } else {
             for (const id of selectedIds) {
-                const s = strokes.find(s => s.id === id)!
+                const s = items.find(s => s.id === id)!
                 const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
                 const bx = Math.min(...xs), by = Math.min(...ys)
                 const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
@@ -456,7 +471,7 @@ export default function BoardClient({ data }: { data: Board }) {
             }
         }
         ctx.restore()
-    }, [size.width, size.height, zoom, offset, strokes, dragRect, selectedIds, dpr])
+    }, [size.width, size.height, zoom, offset, items, dragRect, selectedIds, dpr])
 
 
     // functions for zoom buttons
@@ -578,7 +593,7 @@ export default function BoardClient({ data }: { data: Board }) {
             // Ctrl+Z: Undo last stroke
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
                 e.preventDefault()
-                setStrokes(prev => {
+                setItems(prev => {
                     if (prev.length === 0) return prev
                     return prev.slice(0, -1)
                 })
@@ -587,7 +602,7 @@ export default function BoardClient({ data }: { data: Board }) {
             // Delete: Remove selected strokes
             if (e.key === 'Delete' && selectedIds.length > 0) {
                 e.preventDefault()
-                setStrokes(prev => prev.filter(stroke => !selectedIds.includes(stroke.id)))
+                setItems(prev => prev.filter(stroke => !selectedIds.includes(stroke.id)))
                 setSelectedIds([])
             }
         }
@@ -597,6 +612,36 @@ export default function BoardClient({ data }: { data: Board }) {
             window.removeEventListener('keydown', handleKeyDown)
         }
     }, [selectedIds])
+    const handlePaste = useCallback(
+        async (e: React.ClipboardEvent<HTMLDivElement>) => {
+            const item = Array.from(e.clipboardData.items).find(i =>
+                i.type.startsWith('image/')
+            );
+            if (!item) return;
+
+            const file = item.getAsFile();               // Blob from clipboard
+            if (!file) return;
+
+            const body = new FormData();
+            body.append('file', file, 'pasted-image');
+
+            const res = await fetch('/api/upload', {     //  <-- see next section
+                method: 'POST',
+                body,
+            });
+
+            const response = await res.json() as ImagePasteResponse
+
+            if (!response.success)
+                alert(response.error)
+            else {
+                setItems((s) => [...s, response.imageObject!])
+
+            }
+
+        },
+        []
+    );
 
 
     return (
