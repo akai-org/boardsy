@@ -7,6 +7,8 @@ import Link from 'next/link'
 import type { Board } from '@prisma/client'
 import styles from './board.module.sass'
 
+
+// types for items on the board
 interface Stroke {
     id: number
     type: 'stroke',
@@ -18,27 +20,29 @@ interface ImageObject {
     id: number,
     type: 'image',
     url: string
+    coords: { x: number; y: number }
 }
-
 
 type BoardItem = Stroke | ImageObject
 
-interface ImagePasteResponse {
+
+// server response types
+interface NewItemResponse {
     success: boolean,
-    imageObject?: ImageObject,
     error?: string
 }
+interface ImagePasteResponse extends NewItemResponse {
+    imageObject?: ImageObject,
+}
 
-interface Rect {
+
+// other types
+interface SelectionRect {
     x: number
     y: number
     width: number
     height: number
 }
-
-const MIN_ZOOM = 0.01
-const MAX_ZOOM = 4
-const STEP = 0.1
 
 enum Tools {
     SELECTOR = "selector",
@@ -46,6 +50,11 @@ enum Tools {
     TEXT = "text",
     SHAPES = "shapes"
 }
+
+
+const MIN_ZOOM = 0.01
+const MAX_ZOOM = 4
+const STEP = 0.1
 
 function ToolBar({ activeTool, setActiveTool }: {
     activeTool: Tools,
@@ -67,23 +76,23 @@ function ToolBar({ activeTool, setActiveTool }: {
 
 export default function BoardClient({ data }: { data: Board }) {
 
-   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+    const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
     const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
     // selected rectangle
-    const [dragRect, setDragRect] = useState<Rect | null>(null)
-    const dragRectRef = useRef<Rect | null>(null)
-    const updateDragRect = useCallback((r: Rect | null) => {
+    const [dragSelectionRect, setDragSelectionRect] = useState<SelectionRect | null>(null)
+    const dragRectRef = useRef<SelectionRect | null>(null)
+    const updateDragSelectionRect = useCallback((r: SelectionRect | null) => {
         dragRectRef.current = r
-        setDragRect(r)
+        setDragSelectionRect(r)
     }, [])
 
     // selected items
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
     // items on board
-    const [items, setItems] = useState<Stroke[]>([])
+    const [items, setItems] = useState<BoardItem[]>([])
     const currentStroke = useRef<Stroke | null>(null)
     const nextId = useRef(1)
 
@@ -142,31 +151,31 @@ export default function BoardClient({ data }: { data: Board }) {
 
 
     // canvas.getBoundingClientRect() optimisation
-    const rectRef = useRef<DOMRect | null>(null)
+    const selectionRectRef = useRef<DOMRect | null>(null)
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return
 
-        function updateRect() {
+        function updateSelectionRect() {
             if (!canvas) return
-            rectRef.current = canvas.getBoundingClientRect()
+            selectionRectRef.current = canvas.getBoundingClientRect()
         }
 
-        updateRect()
+        updateSelectionRect()
 
-        window.addEventListener('resize', updateRect)
-        window.addEventListener('scroll', updateRect, true)
+        window.addEventListener('resize', updateSelectionRect)
+        window.addEventListener('scroll', updateSelectionRect, true)
 
         return () => {
-            window.removeEventListener('resize', updateRect)
-            window.removeEventListener('scroll', updateRect, true)
+            window.removeEventListener('resize', updateSelectionRect)
+            window.removeEventListener('scroll', updateSelectionRect, true)
         }
     }, [size.width, size.height])
 
 
     // custom hook for coordinate transformation
     const toLogicalCoords = useCallback((e: PointerEvent) => {
-        const rect = rectRef.current!
+        const rect = selectionRectRef.current!
         const z = zoomRef.current
         const { x: ox, y: oy } = offsetRef.current
         return {
@@ -188,7 +197,7 @@ export default function BoardClient({ data }: { data: Board }) {
 
             // do we hit any selected item?
             const hitId = selectedIds.find(id => {
-                const s = items.find(s => s.id === id)!
+                const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
                 const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
                 const bx = Math.min(...xs), by = Math.min(...ys)
                 const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
@@ -202,7 +211,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 // snapshot all selected items
                 const snapshot = new Map<number, { x: number, y: number }[]>()
                 for (const id of selectedIds) {
-                    const s = items.find(s => s.id === id)!
+                    const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
                     snapshot.set(id, s.points.map(pt => ({ ...pt })))
                 }
                 originalRef.current = snapshot
@@ -210,7 +219,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 // SELECT MODE
                 actionRef.current = 'select'
                 dragStartRef.current = p
-                updateDragRect({ x: p.x, y: p.y, width: 0, height: 0 })
+                updateDragSelectionRect({ x: p.x, y: p.y, width: 0, height: 0 })
             }
             canvas.setPointerCapture(e.pointerId)
         }
@@ -221,7 +230,7 @@ export default function BoardClient({ data }: { data: Board }) {
             const p = toLogicalCoords(e)
             const start = dragStartRef.current!
             if (mode === 'select') {
-                updateDragRect({
+                updateDragSelectionRect({
                     x: Math.min(start.x, p.x),
                     y: Math.min(start.y, p.y),
                     width: Math.abs(p.x - start.x),
@@ -251,6 +260,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 const r = dragRectRef.current
                 if (r) {
                     const hits = items
+                        .filter(item => item.type === 'stroke')
                         .filter(s => {
                             const xs = s.points.map(pt => pt.x), ys = s.points.map(pt => pt.y)
                             const bx = Math.min(...xs), by = Math.min(...ys)
@@ -263,7 +273,7 @@ export default function BoardClient({ data }: { data: Board }) {
                         .map(s => s.id)
                     setSelectedIds(hits)
                 }
-                updateDragRect(null)
+                updateDragSelectionRect(null)
             }
             actionRef.current = null
             dragStartRef.current = null
@@ -280,22 +290,22 @@ export default function BoardClient({ data }: { data: Board }) {
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [activeTool, items, selectedIds, toLogicalCoords, updateDragRect])
+    }, [activeTool, items, selectedIds, toLogicalCoords, updateDragSelectionRect])
 
     useEffect(() => {
-        updateDragRect(null)
+        updateDragSelectionRect(null)
         currentStroke.current = null
-    }, [activeTool, updateDragRect])
+    }, [activeTool, updateDragSelectionRect])
 
     // if a tool other than selector is activated, clear the selection
     useEffect(() => {
         if (activeTool !== Tools.SELECTOR) {
             // clear any live marquee
-            updateDragRect(null)
+            updateDragSelectionRect(null)
             // clear selection
             setSelectedIds([])
         }
-    }, [activeTool, updateDragRect])
+    }, [activeTool, updateDragSelectionRect])
 
 
     // scroll zoom
@@ -306,7 +316,7 @@ export default function BoardClient({ data }: { data: Board }) {
         function onWheel(e: WheelEvent) {
             e.preventDefault()
             if (!canvas) return
-            const rect = rectRef.current
+            const rect = selectionRectRef.current
             if (!rect) return
             const mouseX = e.clientX - rect.left
             const mouseY = e.clientY - rect.top
@@ -346,6 +356,7 @@ export default function BoardClient({ data }: { data: Board }) {
             const { x, y } = toLogicalCoords(e)
             currentStroke.current = {
                 id: nextId.current++,
+                type: 'stroke',
                 points: [{ x, y }],
                 color: 'black',
                 width: 2,
@@ -451,16 +462,16 @@ export default function BoardClient({ data }: { data: Board }) {
         ctx.lineWidth = 1 / zoom
         ctx.setLineDash([4 / zoom, 2 / zoom])
 
-        if (dragRect) {
+        if (dragSelectionRect) {
             ctx.strokeRect(
-                dragRect.x,
-                dragRect.y,
-                dragRect.width,
-                dragRect.height
+                dragSelectionRect.x,
+                dragSelectionRect.y,
+                dragSelectionRect.width,
+                dragSelectionRect.height
             )
         } else {
             for (const id of selectedIds) {
-                const s = items.find(s => s.id === id)!
+                const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
                 const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
                 const bx = Math.min(...xs), by = Math.min(...ys)
                 const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
@@ -471,7 +482,7 @@ export default function BoardClient({ data }: { data: Board }) {
             }
         }
         ctx.restore()
-    }, [size.width, size.height, zoom, offset, items, dragRect, selectedIds, dpr])
+    }, [size.width, size.height, zoom, offset, items, dragSelectionRect, selectedIds, dpr])
 
 
     // functions for zoom buttons
@@ -483,7 +494,7 @@ export default function BoardClient({ data }: { data: Board }) {
             return
         }
 
-        const rect = rectRef.current
+        const rect = selectionRectRef.current
         if (!rect) return
         // center of the canvas in CSS pixels:
         const centerX = rect.width / 2
@@ -512,7 +523,7 @@ export default function BoardClient({ data }: { data: Board }) {
             return
         }
 
-        const rect = rectRef.current
+        const rect = selectionRectRef.current
         if (!rect) return
         const centerX = rect.width / 2
         const centerY = rect.height / 2
@@ -612,6 +623,9 @@ export default function BoardClient({ data }: { data: Board }) {
             window.removeEventListener('keydown', handleKeyDown)
         }
     }, [selectedIds])
+
+
+    // image paste logic
     const handlePaste = useCallback(
         async (e: React.ClipboardEvent<HTMLDivElement>) => {
             const item = Array.from(e.clipboardData.items).find(i =>
@@ -632,16 +646,13 @@ export default function BoardClient({ data }: { data: Board }) {
 
             const response = await res.json() as ImagePasteResponse
 
-            if (!response.success)
+            if (!response.success){
                 alert(response.error)
-            else {
-                setItems((s) => [...s, response.imageObject!])
-
+                return
             }
-
+            setItems((s) => [...s, response.imageObject!])
         },
-        []
-    );
+    []);
 
 
     return (
