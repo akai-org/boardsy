@@ -3,7 +3,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-
 import type { Board } from '@prisma/client'
 import styles from './board.module.sass'
 
@@ -397,8 +396,18 @@ export default function BoardClient({ data }: { data: Board }) {
             if (stroke) {
                 setItems((s) => [...s, stroke])
                 currentStroke.current = null
+
+                const stroketosave = new FormData();
+                stroketosave.append('stroke', JSON.stringify(stroke));
+                fetch("/api/utils",
+                    {
+                        method: 'POST',
+                        body: stroketosave,
+                    })
+
             }
             canvas.releasePointerCapture(e.pointerId)
+
         }
 
         // attach events
@@ -646,13 +655,13 @@ export default function BoardClient({ data }: { data: Board }) {
 
             const response = await res.json() as ImagePasteResponse
 
-            if (!response.success){
+            if (!response.success) {
                 alert(response.error)
                 return
             }
             setItems((s) => [...s, response.imageObject!])
         },
-    []);
+        []);
 
 
     return (
