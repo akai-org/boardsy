@@ -280,30 +280,3 @@ export async function renameBoard(board_id: string, formData: FormData): Promise
         }
     }
 }
-interface BoardStateResponse extends ActionResponse {
-    state: JsonValue
-}
-
-export async function getBoardState(boardId: string): Promise<BoardStateResponse> {
-    const board = await prisma.board.findUnique({
-        where: { id: boardId },
-        select: { state: true },
-    });
-
-    if (!board){
-            return{
-                success: false,
-                message: 'State doesnt exist',
-                error: 'State doesnt exist',
-                state: {}
-            }
-    }
-
-    else {
-        return {
-            success: true,
-            message: 'Board fetched successfully',
-            state: board.state,
-        }
-    }
-}

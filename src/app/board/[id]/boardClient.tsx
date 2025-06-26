@@ -7,6 +7,7 @@ import type { Board } from '@prisma/client'
 import styles from './board.module.sass'
 
 import { BoardItem, Stroke, ImageObject } from '@/types/board'
+import { JsonArray } from '@prisma/client/runtime/library'
 
 
 // server response types
@@ -77,7 +78,8 @@ export default function BoardClient({ data }: { data: Board }) {
     // items on board
     const [items, setItems] = useState<BoardItem[]>([])
     const currentStroke = useRef<Stroke | null>(null)
-    const nextId = useRef(1)
+    const nextId = useRef(data.state ? (data.state as BoardItem[]).length : 0)
+    console.log(nextId.current)
 
     // moving selected items around
     const actionRef = useRef<'move' | 'select' | null>(null)
@@ -383,8 +385,8 @@ export default function BoardClient({ data }: { data: Board }) {
 
                 const stroketosave = new FormData();
                 stroketosave.append('boardid', data.id);
-                stroketosave.append('stroke', JSON.stringify(stroke));
-                fetch("/api/utils",
+                stroketosave.append('boarditem', JSON.stringify(stroke));
+                fetch("/api/board/additem",
                     {
                         method: 'POST',
                         body: stroketosave,
