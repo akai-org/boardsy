@@ -6,23 +6,7 @@ import Link from 'next/link'
 import type { Board } from '@prisma/client'
 import styles from './board.module.sass'
 
-
-// types for items on the board
-interface Stroke {
-    id: number
-    type: 'stroke',
-    points: { x: number; y: number }[]
-    color: string
-    width: number
-}
-interface ImageObject {
-    id: number,
-    type: 'image',
-    url: string
-    coords: { x: number; y: number }
-}
-
-type BoardItem = Stroke | ImageObject
+import { BoardItem, Stroke, ImageObject } from '@/types/board'
 
 
 // server response types
