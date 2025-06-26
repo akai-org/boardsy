@@ -398,6 +398,7 @@ export default function BoardClient({ data }: { data: Board }) {
                 currentStroke.current = null
 
                 const stroketosave = new FormData();
+                stroketosave.append('boardid', data.id);
                 stroketosave.append('stroke', JSON.stringify(stroke));
                 fetch("/api/utils",
                     {
