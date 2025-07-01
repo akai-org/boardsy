@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
 
     const oldState = board.state as BoardItem[]
     const newState = oldState.length > 0 ? [...oldState, newItem] : [newItem]
-    console.log(newState)
 
     await prisma.board.update({
         where: { id: board.id },
