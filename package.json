@@ -10,14 +10,16 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@prisma/client": "^6.8.2",
+    "@prisma/client": "^6.10.1",
     "dotenv": "^16.5.0",
     "i": "^0.3.7",
     "jose": "^6.0.10",
     "next": "^15.4.0-canary.29",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sass": "^1.89.2"
+    "sass": "^1.89.2",
+    "sharp": "^0.34.2",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -28,7 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^15.4.0-canary.29",
-    "prisma": "^6.8.2",
+    "prisma": "^6.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

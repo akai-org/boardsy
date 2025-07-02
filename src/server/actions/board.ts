@@ -4,6 +4,7 @@ import type { Board } from '@prisma/client'
 import { ActionResponse } from "@/types/global";
 import { getSession } from "../auth";
 import prisma from "../db";
+import { JsonValue } from '@prisma/client/runtime/library';
 
 
 export async function createBoard(formData: FormData): Promise<ActionResponse> {
@@ -46,13 +47,12 @@ export async function createBoard(formData: FormData): Promise<ActionResponse> {
 
 
 interface BoardResponse extends ActionResponse {
-  board?: Board
+    board?: Board
 }
 
 export async function getBoard(boardid: string): Promise<BoardResponse> {
 
     const session = await getSession()
-
     if (!session)
         return {
             success: false,
@@ -67,7 +67,7 @@ export async function getBoard(boardid: string): Promise<BoardResponse> {
                 id: boardid
             }
         })
-
+        // console.log(board?.state)
         if (!board)
             return {
                 success: false,
@@ -187,7 +187,7 @@ export async function deleteBoard(board_id: string): Promise<ActionResponse> {
 
     try {
         const board = await prisma.board.findUnique({
-            where: {id: board_id}
+            where: { id: board_id }
         })
 
         if (!board)
@@ -205,11 +205,11 @@ export async function deleteBoard(board_id: string): Promise<ActionResponse> {
             }
 
         await prisma.board.delete({
-            where: {id: board_id}
+            where: { id: board_id }
         })
 
-        return { success: true, message: 'Board deleted successfuly'}
-        
+        return { success: true, message: 'Board deleted successfuly' }
+
     } catch (e) {
 
         console.log(e)
@@ -245,7 +245,7 @@ export async function renameBoard(board_id: string, formData: FormData): Promise
 
     try {
         const board = await prisma.board.findUnique({
-            where: {id: board_id}
+            where: { id: board_id }
         })
 
         if (!board)
@@ -264,12 +264,12 @@ export async function renameBoard(board_id: string, formData: FormData): Promise
 
         if (newname !== board.name)
             await prisma.board.update({
-                where: {id: board_id},
-                data: { name: newname}
+                where: { id: board_id },
+                data: { name: newname }
             })
 
-        return { success: true, message: 'Board renamed successfuly'}
-        
+        return { success: true, message: 'Board renamed successfuly' }
+
     } catch (e) {
 
         console.log(e)
