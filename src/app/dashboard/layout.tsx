@@ -1,7 +1,9 @@
 import Link from "next/link";
 import styles from "./layout.module.css";
 import Options from "./options";
-import Image from 'next/image';
+// import { Image } from "@mantine/core";
+import Image from "next/image";
+import { logos } from "@/types/logos";
 
 export default function DashboardLayout({
     children,
@@ -14,13 +16,11 @@ export default function DashboardLayout({
                 <section>
                     <Link href={'/dashboard'} className={styles.logo}>
                         <Image
-                            src={'/icon.svg'}
-                            alt="Boardsy icon"
-                            width={40}
-                            height={40}
-                            className={styles.objectCover}
+                            src={logos.black.full}
+                            alt='Boardsy icon'
+                            height={120}
+                            width={120}
                         />
-                        <h1>Boardsy</h1>
                     </Link>
                 </section>
                 <section>
