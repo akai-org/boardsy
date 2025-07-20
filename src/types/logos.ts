@@ -1,28 +1,28 @@
 type Logo = {
-    logo: string;
-    title: string;
-    full: string;
+    symbol: string;
+    vertical: string;
+    horizontal: string;
 }
 
 export const logos: Record<string, Logo> = {
     black: {
-        logo: '/logos/black/logo.png',
-        title: '/logos/black/title.png',
-        full: '/logos/black/full.png',
+        symbol: '/logos/black/symbol.png',
+        vertical: '/logos/black/vertical.png',
+        horizontal: '/logos/black/horizontal.png',
     },
     white: {
-        logo: '/logos/white/logo.png',
-        title: '/logos/white/title.png',
-        full: '/logos/white/full.png',
+        symbol: '/logos/white/symbol.png',
+        vertical: '/logos/white/vertical.png',
+        horizontal: '/logos/white/horizontal.png',
     },
     violet: {
-        logo: '/logos/violet/logo.png',
-        title: '/logos/violet/title.png',
-        full: '/logos/violet/full.png',
+        symbol: '/logos/violet/symbol.png',
+        vertical: '/logos/violet/vertical.png',
+        horizontal: '/logos/violet/horizontal.png',
     },
     green: {
-        logo: '/logos/green/logo.png',
-        title: '/logos/green/title.png',
-        full: '/logos/green/full.png',
+        symbol: '/logos/green/symbol.png',
+        vertical: '/logos/green/vertical.png',
+        horizontal: '/logos/green/horizontal.png',
     },
 }
