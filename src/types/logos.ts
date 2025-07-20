@@ -8,7 +8,7 @@ export const logos: Record<string, Logo> = {
     black: {
         symbol: '/logos/black/symbol.png',
         vertical: '/logos/black/vertical.png',
-        horizontal: '/logos/black/horizontal.png',
+        horizontal: '/logos/black/horizontal.webp',
     },
     white: {
         symbol: '/logos/white/symbol.png',
