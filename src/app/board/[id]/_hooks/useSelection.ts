@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { BoardItem } from '@/types/board'
 import { Tools } from '../_components/ToolBar'
-import { findHitItem, findItemsInSelectionRect, translateSelectedItemsFromOriginal } from '../_ustils/selectionUtils'
+import { findHitItem, findItemsInSelectionRect, translateSelectedItems } from '../_ustils/selectionUtils'
 
 interface SelectionRect {
     x: number
@@ -96,7 +96,7 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
                 // MOVE MODE: translate selected items
                 const dx = p.x - start.x
                 const dy = p.y - start.y
-                setItems(prev => translateSelectedItemsFromOriginal(prev, selectedIds, originalRef.current, dx, dy))
+                setItems(prev => translateSelectedItems(prev, selectedIds, originalRef.current, dx, dy))
             }
         }
 

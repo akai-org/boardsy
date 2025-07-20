@@ -59,7 +59,7 @@ export function translateStroke(
     }
 }
 
-export function translateSelectedItemsFromOriginal(
+export function translateSelectedItems(
     items: BoardItem[],
     selectedIds: number[],
     originalPositions: Map<number, { x: number, y: number }[]>,
@@ -79,18 +79,6 @@ export function translateSelectedItemsFromOriginal(
                 y: point.y + dy
             }))
         }
-    })
-}
-
-export function translateSelectedItems(
-    items: BoardItem[],
-    selectedIds: number[],
-    dx: number,
-    dy: number
-): BoardItem[] {
-    return items.map(item => {
-        if (!selectedIds.includes(item.id)) return item
-        return translateStroke(item, dx, dy)
     })
 }
 
