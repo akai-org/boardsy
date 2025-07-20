@@ -6,7 +6,7 @@ export function findHitItem(
     items: BoardItem[],
     selectedIds: number[]
 ): number | null {
-    // Check if we hit any selected item first
+    // Check if we hit any selected item first (for moving)
     for (const id of selectedIds) {
         const item = items.find(item => item.id === id)
         if (!item || item.type !== 'stroke') continue
@@ -14,6 +14,16 @@ export function findHitItem(
         const bbox = getStrokeBoundingBox(item)
         if (isPointInRect(point, bbox)) {
             return id
+        }
+    }
+    
+    // If no selected item was hit, check all items (for initial selection)
+    for (const item of items) {
+        if (item.type !== 'stroke') continue
+        
+        const bbox = getStrokeBoundingBox(item)
+        if (isPointInRect(point, bbox)) {
+            return item.id
         }
     }
     
@@ -47,6 +57,29 @@ export function translateStroke(
             y: point.y + dy
         }))
     }
+}
+
+export function translateSelectedItemsFromOriginal(
+    items: BoardItem[],
+    selectedIds: number[],
+    originalPositions: Map<number, { x: number, y: number }[]>,
+    dx: number,
+    dy: number
+): BoardItem[] {
+    return items.map(item => {
+        if (!selectedIds.includes(item.id) || item.type !== 'stroke') return item
+        
+        const originalPoints = originalPositions.get(item.id)
+        if (!originalPoints) return item
+        
+        return {
+            ...item,
+            points: originalPoints.map(point => ({
+                x: point.x + dx,
+                y: point.y + dy
+            }))
+        }
+    })
 }
 
 export function translateSelectedItems(

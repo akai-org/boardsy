@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { BoardItem } from '@/types/board'
 import { Tools } from '../_components/ToolBar'
-import { findHitItem, findItemsInSelectionRect, translateSelectedItems } from '../_ustils/selectionUtils'
+import { findHitItem, findItemsInSelectionRect, translateSelectedItemsFromOriginal } from '../_ustils/selectionUtils'
 
 interface SelectionRect {
     x: number
@@ -37,7 +37,9 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
 
     // selection functionality with select items and move selected items mode
     useEffect(() => {
-        const canvas = canvasRef.current!
+        const canvas = canvasRef.current
+        if (!canvas) return
+        
         function onPointerDown(e: PointerEvent) {
             if (activeTool !== Tools.SELECTOR || e.button !== 0) return
             const p = toLogicalCoords(e)
@@ -46,23 +48,36 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
             const hitId = findHitItem(p, items, selectedIds)
 
             if (hitId != null) {
-                // MOVE MODE
-                actionRef.current = 'move'
-                dragStartRef.current = p
-                // snapshot all selected items
-                const snapshot = new Map<number, { x: number, y: number }[]>()
-                for (const id of selectedIds) {
-                    const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
-                    snapshot.set(id, s.points.map(pt => ({ ...pt })))
+                // If we hit a selected item, enter MOVE MODE
+                if (selectedIds.includes(hitId)) {
+                    actionRef.current = 'move'
+                    dragStartRef.current = p
+                    // snapshot all selected items
+                    const snapshot = new Map<number, { x: number, y: number }[]>()
+                    for (const id of selectedIds) {
+                        const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
+                        snapshot.set(id, s.points.map(pt => ({ ...pt })))
+                    }
+                    originalRef.current = snapshot
+                } else {
+                    // If we hit an unselected item, select it and enter MOVE MODE
+                    setSelectedIds([hitId])
+                    actionRef.current = 'move'
+                    dragStartRef.current = p
+                    const item = items.filter(item => item.type === 'stroke').find(s => s.id === hitId)!
+                    const snapshot = new Map<number, { x: number, y: number }[]>()
+                    snapshot.set(hitId, item.points.map(pt => ({ ...pt })))
+                    originalRef.current = snapshot
                 }
-                originalRef.current = snapshot
             } else {
                 // SELECT MODE
                 actionRef.current = 'select'
                 dragStartRef.current = p
                 updateDragSelectionRect({ x: p.x, y: p.y, width: 0, height: 0 })
             }
-            canvas.setPointerCapture(e.pointerId)
+            if (canvas) {
+                canvas.setPointerCapture(e.pointerId)
+            }
         }
 
         function onPointerMove(e: PointerEvent) {
@@ -81,7 +96,7 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
                 // MOVE MODE: translate selected items
                 const dx = p.x - start.x
                 const dy = p.y - start.y
-                setItems(prev => translateSelectedItems(prev, selectedIds, dx, dy))
+                setItems(prev => translateSelectedItemsFromOriginal(prev, selectedIds, originalRef.current, dx, dy))
             }
         }
 
@@ -98,7 +113,9 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
             }
             actionRef.current = null
             dragStartRef.current = null
-            canvas.releasePointerCapture(e.pointerId)
+            if (canvas) {
+                canvas.releasePointerCapture(e.pointerId)
+            }
         }
 
         canvas.addEventListener('pointerdown', onPointerDown)
@@ -111,7 +128,7 @@ export function useSelection({ items, activeTool, canvasRef, toLogicalCoords, se
             canvas.removeEventListener('pointerup', onPointerUp)
             canvas.removeEventListener('pointercancel', onPointerUp)
         }
-    }, [activeTool, items, selectedIds, toLogicalCoords, updateDragSelectionRect, setItems, canvasRef])
+    }, [activeTool, items, selectedIds, toLogicalCoords, updateDragSelectionRect, setItems, setSelectedIds, canvasRef])
 
     // if a tool other than selector is activated, clear the selection
     useEffect(() => {

@@ -40,7 +40,8 @@ export default function BoardClient({ data }: { data: Board }) {
     setZoom,
     setOffset,
     toLogicalCoords,
-  } = useCanvas({ items, currentStroke, dragSelectionRect: null, selectedIds: [] })
+    renderSelection,
+  } = useCanvas({ items, currentStroke })
 
   // Use the selection hook
   const { dragSelectionRect, selectedIds, setSelectedIds /* updateDragSelectionRect */ } =
@@ -52,10 +53,10 @@ export default function BoardClient({ data }: { data: Board }) {
       setItems,
     })
 
-  // Update canvas hook with actual dragSelectionRect and selectedIds
+  // Update canvas with selection state changes
   useEffect(() => {
-    // This effect updates the canvas hook when selection state changes
-  }, [dragSelectionRect, selectedIds])
+    renderSelection(dragSelectionRect, selectedIds)
+  }, [dragSelectionRect, selectedIds, renderSelection])
 
   // Use the pencil tool hook
   usePencilTool({
