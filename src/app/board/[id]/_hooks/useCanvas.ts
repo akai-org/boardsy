@@ -12,11 +12,9 @@ import { drawStroke, drawSelectionBox, drawSelectionMarquee } from '../_ustils/d
 interface UseCanvasProps {
     items: BoardItem[]
     currentStroke: React.MutableRefObject<Stroke | null>
-    dragSelectionRect: { x: number; y: number; width: number; height: number } | null
-    selectedIds: number[]
 }
 
-export function useCanvas({ items, currentStroke, dragSelectionRect, selectedIds }: UseCanvasProps) {
+export function useCanvas({ items, currentStroke }: UseCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const selectionRectRef = useRef<DOMRect | null>(null)
 
@@ -129,20 +127,50 @@ export function useCanvas({ items, currentStroke, dragSelectionRect, selectedIds
         if (currentStroke.current) {
             drawStroke(ctx, currentStroke.current, zoom, offset, dpr)
         }
+    }, [size.width, size.height, zoom, offset, items, currentStroke, dpr])
+
+    // Function to render selection state (to be called externally)
+    const renderSelection = useCallback((dragSelectionRect: { x: number; y: number; width: number; height: number } | null, selectedIds: number[]) => {
+        const c = canvasRef.current
+        if (!c) return
+        const ctx = c.getContext('2d')
+        if (!ctx) return
+
+        // Clear and redraw everything first
+        c.width = size.width * dpr
+        c.height = size.height * dpr
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, c.width, c.height)
+
+        const scale = zoom * dpr
+        ctx.setTransform(scale, 0, 0, scale, offset.x * scale, offset.y * scale)
+
+        // draw saved strokes
+        for (const stroke of items.filter(item => item.type === 'stroke')) {
+            drawStroke(ctx, stroke, zoom, offset, dpr)
+        }
+
+        // draw in-flight stroke
+        if (currentStroke.current) {
+            drawStroke(ctx, currentStroke.current, zoom, offset, dpr)
+        }
 
         // draw marquee or selection boxes
         if (dragSelectionRect) {
             drawSelectionMarquee(ctx, dragSelectionRect, zoom)
         } else {
             for (const id of selectedIds) {
-                const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)!
-                const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
-                const bx = Math.min(...xs), by = Math.min(...ys)
-                const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
-                drawSelectionBox(ctx, { x: bx, y: by, width: bw, height: bh }, zoom)
+                const s = items.filter(item => item.type === 'stroke').find(s => s.id === id)
+                if (s) {
+                    const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y)
+                    const bx = Math.min(...xs), by = Math.min(...ys)
+                    const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by
+                    drawSelectionBox(ctx, { x: bx, y: by, width: bw, height: bh }, zoom)
+                }
             }
         }
-    }, [size.width, size.height, zoom, offset, items, dragSelectionRect, selectedIds, dpr, currentStroke])
+    }, [size.width, size.height, zoom, offset, items, currentStroke, dpr])
 
     return {
         canvasRef,
@@ -156,5 +184,6 @@ export function useCanvas({ items, currentStroke, dragSelectionRect, selectedIds
         setZoom,
         setOffset,
         toLogicalCoords,
+        renderSelection,
     }
 }

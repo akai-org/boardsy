@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { Board } from '@prisma/client'
 import styles from './board.module.sass'
+import { Image } from '@mantine/core'
 
 import { BoardItem, Stroke } from '@/types/board'
 import { useCanvas } from './_hooks/useCanvas'
@@ -14,109 +15,97 @@ import { useKeyboardShortcuts } from './_hooks/useKeyboardShortcuts'
 import { ToolBar, Tools } from './_components/ToolBar'
 import { ZoomControls } from './_components/ZoomControls'
 import { Canvas } from './_components/Canvas'
+import { logos } from '@/types/logos'
 
 export default function BoardClient({ data }: { data: Board }) {
-    
-    const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
+  const [activeTool, setActiveTool] = useState<Tools>(Tools.SELECTOR)
 
-    // items on board
-    const [items, setItems] = useState<BoardItem[]>((data.state as BoardItem[]).length > 0 ? data.state as BoardItem[] : [])
-    const currentStroke = useRef<Stroke | null>(null)
-    const nextId = useRef(data.state ? (data.state as BoardItem[]).length : 0)
+  // items on board
+  const [items, setItems] = useState<BoardItem[]>(
+    (data.state as BoardItem[]).length > 0 ? (data.state as BoardItem[]) : []
+  )
+  const currentStroke = useRef<Stroke | null>(null)
+  const nextId = useRef(data.state ? (data.state as BoardItem[]).length : 0)
 
-    // Use the canvas hook first
-    const {
-        canvasRef,
-        selectionRectRef,
-        size,
-        dpr,
-        zoom,
-        offset,
-        zoomRef,
-        offsetRef,
-        setZoom,
-        setOffset,
-        toLogicalCoords,
-    } = useCanvas({ items, currentStroke, dragSelectionRect: null, selectedIds: [] })
+  // Use the canvas hook first
+  const {
+    canvasRef,
+    selectionRectRef,
+    size,
+    dpr,
+    zoom,
+    // offset,
+    zoomRef,
+    offsetRef,
+    setZoom,
+    setOffset,
+    toLogicalCoords,
+    renderSelection,
+  } = useCanvas({ items, currentStroke })
 
-    // Use the selection hook
-    const {
-        dragSelectionRect,
-        selectedIds,
-        setSelectedIds,
-        updateDragSelectionRect,
-    } = useSelection({ 
-        items, 
-        activeTool, 
-        canvasRef,
-        toLogicalCoords,
-        setItems 
+  // Use the selection hook
+  const { dragSelectionRect, selectedIds, setSelectedIds /* updateDragSelectionRect */ } =
+    useSelection({
+      items,
+      activeTool,
+      canvasRef,
+      toLogicalCoords,
+      setItems,
     })
 
-    // Update canvas hook with actual dragSelectionRect and selectedIds
-    useEffect(() => {
-        // This effect updates the canvas hook when selection state changes
-    }, [dragSelectionRect, selectedIds])
+  // Update canvas with selection state changes
+  useEffect(() => {
+    renderSelection(dragSelectionRect, selectedIds)
+  }, [dragSelectionRect, selectedIds, renderSelection])
 
-    // Use the pencil tool hook
-    usePencilTool({
-        activeTool,
-        canvasRef,
-        toLogicalCoords,
-        zoomRef,
-        offsetRef,
-        dpr,
-        size,
-        nextId,
-        currentStroke,
-        setItems,
-        boardId: data.id
-    })
+  // Use the pencil tool hook
+  usePencilTool({
+    activeTool,
+    canvasRef,
+    toLogicalCoords,
+    zoomRef,
+    offsetRef,
+    dpr,
+    size,
+    nextId,
+    currentStroke,
+    setItems,
+    boardId: data.id,
+  })
 
-    // Use the zoom/pan hook
-    const { zoomIn, zoomOut } = useZoomPan({
-        canvasRef,
-        selectionRectRef,
-        zoomRef,
-        offsetRef,
-        setZoom,
-        setOffset,
-        dpr
-    })
+  // Use the zoom/pan hook
+  const { zoomIn, zoomOut } = useZoomPan({
+    canvasRef,
+    selectionRectRef,
+    zoomRef,
+    offsetRef,
+    setZoom,
+    setOffset,
+    dpr,
+  })
 
-    // Use the keyboard shortcuts hook
-    useKeyboardShortcuts({
-        items,
-        selectedIds,
-        setItems,
-        setSelectedIds
-    })
+  // Use the keyboard shortcuts hook
+  useKeyboardShortcuts({
+    items,
+    selectedIds,
+    setItems,
+    setSelectedIds,
+  })
 
-    return (
-        <>
-            <div className={styles.title}>
-                <Link href="/dashboard">
-                    <h1>Boardsy</h1>
-                </Link>
-                <h2>{data.name}</h2>
-            </div>
+  return (
+    <>
+      <div className={styles.title}>
+        <Link href='/dashboard'>
+          <Image src={logos.black.horizontal} alt='Boardsy icon' width={120} height={75} />
+        </Link>
+        <h2>{data.name}</h2>
+      </div>
 
-            <ToolBar
-                activeTool={activeTool}
-                setActiveTool={setActiveTool}
-            />
+      <ToolBar activeTool={activeTool} setActiveTool={setActiveTool} />
 
-            <ZoomControls
-                zoom={zoom}
-                zoomIn={zoomIn}
-                zoomOut={zoomOut}
-            />
+      <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
 
-            <Canvas
-                canvasRef={canvasRef}
-                size={size}
-                activeTool={activeTool}
-            />
-        </>
-    )
+      <Canvas canvasRef={canvasRef} size={size} activeTool={activeTool} />
+    </>
+  )
 }
