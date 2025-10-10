@@ -1,4 +1,4 @@
-name: CI - split: lint, generate, build, migrate, push
+name: "CI - split: lint, generate, build, migrate, push"
 
 on:
   push:
