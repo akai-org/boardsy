@@ -1,11 +1,8 @@
 name: "CI - split: lint, generate, build, migrate, push"
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: {}
 
 env:
   # Default image name (override by setting the secret IMAGE_NAME to e.g. 'username/repo')
