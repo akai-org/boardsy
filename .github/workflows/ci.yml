@@ -143,4 +143,4 @@ jobs:
     needs: [build]
     steps:
       - name: Done
-        run: echo "CI finished. Image: $IMAGE (pushed if credentials provided)"
+        run: echo "CI finished."
