@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+.git
+.github
+Dockerfile
+.dockerignore
+npm-debug.log
+docker-compose.override.yml
+env.*
+backups
+.vscode
+.cache
+*.tgz

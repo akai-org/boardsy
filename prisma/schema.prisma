@@ -7,6 +7,8 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
   output   = "../node_modules/.prisma/client"
+  // Ensure runtime binary for Debian/OpenSSL is generated for containers
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
 }
 
 model User {

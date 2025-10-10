@@ -1,0 +1,5 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run lint-staged (configured in package.json)
+npx --no-install lint-staged
