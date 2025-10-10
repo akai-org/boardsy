@@ -1,0 +1,149 @@
+name: CI - split: lint, generate, build, migrate, push
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+env:
+  # Default image name (override by setting the secret IMAGE_NAME to e.g. 'username/repo')
+  IMAGE: ${{ secrets.IMAGE_NAME || github.repository }}
+
+jobs:
+  lint:
+    name: lint + pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint (eslint)
+        run: npm run lint
+
+      - name: Run pre-commit (lint-staged)
+        # lint-staged expects staged files; --allow-empty prevents failure when none are staged in CI
+        run: npx lint-staged --allow-empty --verbose
+
+  generate:
+    name: prisma:generate
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate (produce client binaries)
+        run: npx prisma generate
+
+  build:
+    name: build image
+    runs-on: ubuntu-latest
+    needs: generate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (local cache, do not push)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+
+  migrate:
+    name: optional: prisma migrate deploy
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ secrets.DATABASE_URL }}
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma migrate deploy
+        run: npx prisma migrate deploy
+
+  push:
+    name: optional: docker push
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker registry
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+
+  done-notify:
+    name: done
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Done
+        run: echo "CI finished. Image: $IMAGE (pushed if credentials provided)"

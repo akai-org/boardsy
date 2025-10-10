@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres_db
+    # load credentials from .env (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB)
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-boardsy}
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-boardsy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+  migrate:
+    build:
+      context: .
+      target: dev
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-boardsy}
+      # ensure migrate connects to the postgres service inside compose
+      - LOCAL_DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-boardsy}
+      - LOCAL_SHADOW_DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-boardsy}_shadow
+    # ensure dependencies are installed before running migrations
+    command: sh -c "npm install --no-audit --no-fund && npx prisma migrate deploy"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: boardsy_app
+    working_dir: /app
+    # load runtime variables from .env
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=${PORT:-3000}
+      # When running inside Docker the DB hostname must be the postgres service name
+      - LOCAL_DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-boardsy}
+      - LOCAL_SHADOW_DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-boardsy}_shadow
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+
+# networks:
+#   pg_network:
+#     driver: bridge
+
+volumes:
+  node_modules: {}

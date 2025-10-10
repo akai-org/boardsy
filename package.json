@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev_turbopack": "next dev --turbopack",
+    "prepare": "husky install",
+    "precommit": "lint-staged",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -27,6 +29,8 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "husky": "^8.0.0",
+    "lint-staged": "^13.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20.17.32",
@@ -38,5 +42,12 @@
     "prisma": "^6.12.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  }
+  ,
+  "lint-staged": {
+    "**/*.{js,ts,tsx,jsx,json,css,scss,md}": [
+      "prettier --write",
+      "git add"
+    ]
   }
 }
